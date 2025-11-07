@@ -1,0 +1,36 @@
+﻿# Root
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+.vscode/
+.idea/
+*.iml
+
+# Node/Web
+node_modules/
+.next/
+dist/
+build/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Android / Gradle
+.gradle/
+local.properties
+**/build/
+.cxx/
+captures/
+*.keystore
+*.jks
+
+# Firebase
+.firebase/
+.firebaserc.local
+storage-debug/
