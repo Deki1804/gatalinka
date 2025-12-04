@@ -231,20 +231,31 @@ fun AppNavHost(
                         // Očisti custom UserInput
                         readingForOthersVm.clear()
                         // Navigiraj direktno na Home i očisti cijeli back stack
-                        nav.navigate(Routes.Home) {
-                            // Pop to start destination (Home) and clear everything
-                            popUpTo(nav.graph.startDestinationId) { inclusive = true }
-                            launchSingleTop = true
+                        // Provjeri da li Home postoji u back stacku
+                        val hasHomeInStack = nav.backQueue.any { it.destination.route == Routes.Home }
+                        if (hasHomeInStack) {
+                            // Ako Home postoji, popaj do njega
+                            nav.popBackStack(Routes.Home, inclusive = false)
+                        } else {
+                            // Ako Home ne postoji, navigiraj tamo i očisti sve
+                            nav.navigate(Routes.Home) {
+                                popUpTo(nav.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     },
                     onSave = { 
                         // Očisti custom UserInput
                         readingForOthersVm.clear()
-                        // Navigiraj direktno na Home i očisti cijeli back stack
-                        nav.navigate(Routes.Home) {
-                            // Pop to start destination (Home) and clear everything
-                            popUpTo(nav.graph.startDestinationId) { inclusive = true }
-                            launchSingleTop = true
+                        // Isti pristup kao za onBack
+                        val hasHomeInStack = nav.backQueue.any { it.destination.route == Routes.Home }
+                        if (hasHomeInStack) {
+                            nav.popBackStack(Routes.Home, inclusive = false)
+                        } else {
+                            nav.navigate(Routes.Home) {
+                                popUpTo(nav.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     },
                     targetName = targetName
