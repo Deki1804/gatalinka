@@ -58,9 +58,9 @@ fun ReadCupScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<GatalinkaReadingUiModel?>(null) }
     
-    // Pokreni čitanje jednom - osvježi kada se promijeni imageUri ili customUserInput
+    // Pokreni čitanje jednom - osvježi kada se promijeni imageUri
     // Koristi viewModelScope da se API poziv ne prekine ako kompozicija napusti
-    LaunchedEffect(imageUri, readingForOthersVm.customUserInput) {
+    LaunchedEffect(imageUri) {
         isLoading = true
         errorMessage = null
         result = null
@@ -71,27 +71,58 @@ fun ReadCupScreen(
             
             // VAŽNO: Koristi customUserInput ako je potpuno postavljen (ima zodiacSign i gender)
             // Čitaj direktno iz ViewModela unutar LaunchedEffect da osiguramo najnoviju vrijednost
-            val currentCustomUserInput = readingForOthersVm.customUserInput
-            val userInput = if (currentCustomUserInput != null && 
-                               currentCustomUserInput.zodiacSign != null && 
-                               currentCustomUserInput.gender != com.gatalinka.app.data.Gender.Unspecified &&
-                               currentCustomUserInput.birthdate.isNotEmpty()) {
+            // Čekaj malo da osiguramo da je ViewModel state postavljen (ako je došao iz ReadingForOthers)
+            var attempts = 0
+            var currentCustomUserInput: com.gatalinka.app.data.UserInput? = null
+            
+            // Pokušaj dohvatiti customUserInput - čekaj do 500ms ako nije postavljen
+            while (attempts < 10 && currentCustomUserInput == null) {
+                currentCustomUserInput = readingForOthersVm.customUserInput
+                if (currentCustomUserInput == null || 
+                    currentCustomUserInput.zodiacSign == null || 
+                    currentCustomUserInput.gender == com.gatalinka.app.data.Gender.Unspecified) {
+                    kotlinx.coroutines.delay(50)
+                    attempts++
+                    currentCustomUserInput = null // Reset da provjerimo ponovno
+                } else {
+                    break // Našli smo validan customUserInput
+                }
+            }
+            
+            // Finalna provjera
+            val finalCustomUserInput = readingForOthersVm.customUserInput
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("ReadCupScreen", "=== LaunchedEffect Triggered ===")
+                android.util.Log.d("ReadCupScreen", "imageUri: $imageUri")
+                android.util.Log.d("ReadCupScreen", "Attempts: $attempts")
+                android.util.Log.d("ReadCupScreen", "finalCustomUserInput: ${finalCustomUserInput != null}")
+                finalCustomUserInput?.let { cui ->
+                    android.util.Log.d("ReadCupScreen", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                    android.util.Log.d("ReadCupScreen", "  gender: ${cui.gender.name}")
+                    android.util.Log.d("ReadCupScreen", "  birthdate: ${cui.birthdate}")
+                }
+            }
+            val userInput = if (finalCustomUserInput != null && 
+                               finalCustomUserInput.zodiacSign != null && 
+                               finalCustomUserInput.gender != com.gatalinka.app.data.Gender.Unspecified &&
+                               finalCustomUserInput.birthdate.isNotEmpty()) {
                 if (com.gatalinka.app.BuildConfig.DEBUG) {
                     android.util.Log.d("ReadCupScreen", "✅ Using CUSTOM UserInput for reading for others")
-                    android.util.Log.d("ReadCupScreen", "Custom zodiac: ${currentCustomUserInput.zodiacSign?.displayName}")
-                    android.util.Log.d("ReadCupScreen", "Custom gender: ${currentCustomUserInput.gender.name}")
-                    android.util.Log.d("ReadCupScreen", "Custom birthdate: ${currentCustomUserInput.birthdate}")
+                    android.util.Log.d("ReadCupScreen", "Custom zodiac: ${finalCustomUserInput.zodiacSign?.displayName}")
+                    android.util.Log.d("ReadCupScreen", "Custom gender: ${finalCustomUserInput.gender.name}")
+                    android.util.Log.d("ReadCupScreen", "Custom birthdate: ${finalCustomUserInput.birthdate}")
                 }
-                currentCustomUserInput
+                finalCustomUserInput
             } else {
                 val defaultInput = preferencesRepo.userInput.first()
                 if (com.gatalinka.app.BuildConfig.DEBUG) {
                     android.util.Log.d("ReadCupScreen", "⚠️ Using DEFAULT UserInput (custom not set or incomplete)")
                     android.util.Log.d("ReadCupScreen", "Default zodiac: ${defaultInput.zodiacSign?.displayName}")
-                    android.util.Log.d("ReadCupScreen", "Custom input check: null=${currentCustomUserInput == null}, " +
-                        "zodiac=${currentCustomUserInput?.zodiacSign?.displayName}, " +
-                        "gender=${currentCustomUserInput?.gender?.name}, " +
-                        "birthdate=${currentCustomUserInput?.birthdate}")
+                    android.util.Log.d("ReadCupScreen", "Custom input check: null=${finalCustomUserInput == null}, " +
+                        "zodiac=${finalCustomUserInput?.zodiacSign?.displayName}, " +
+                        "gender=${finalCustomUserInput?.gender?.name}, " +
+                        "birthdate=${finalCustomUserInput?.birthdate}")
                 }
                 defaultInput
             }

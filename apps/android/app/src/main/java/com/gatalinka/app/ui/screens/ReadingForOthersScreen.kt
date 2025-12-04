@@ -38,6 +38,20 @@ fun ReadingForOthersScreen(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     
+    // Osiguraj da se ViewModel state učita prije nego što se koristi
+    LaunchedEffect(Unit) {
+        // Provjeri da li već postoje podaci u ViewModelu
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            android.util.Log.d("ReadingForOthersScreen", "=== Screen Initialized ===")
+            android.util.Log.d("ReadingForOthersScreen", "vm.customUserInput: ${vm.customUserInput != null}")
+            vm.customUserInput?.let { cui ->
+                android.util.Log.d("ReadingForOthersScreen", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                android.util.Log.d("ReadingForOthersScreen", "  gender: ${cui.gender.name}")
+                android.util.Log.d("ReadingForOthersScreen", "  birthdate: ${cui.birthdate}")
+            }
+        }
+    }
+    
     var name by remember { mutableStateOf(TextFieldValue(vm.personName)) }
     var birth by remember { mutableStateOf(TextFieldValue(vm.customUserInput?.birthdate ?: "")) }
     var gender by remember { mutableStateOf(vm.customUserInput?.gender ?: Gender.Unspecified) }
