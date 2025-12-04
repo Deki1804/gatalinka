@@ -54,6 +54,7 @@ fun AppNavHost(
                 onContinue = { 
                     // Provjeri da li je customUserInput postavljen prije navigacije
                     val customInput = readingForOthersVm.customUserInput
+                    val personName = readingForOthersVm.personName
                     if (com.gatalinka.app.BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== Navigating to CupEditor ===")
                         android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
@@ -61,6 +62,19 @@ fun AppNavHost(
                             android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
                             android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
                             android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                        }
+                    }
+                    // Spremi podatke u savedStateHandle prije navigacije
+                    if (customInput != null) {
+                        nav.currentBackStackEntry?.savedStateHandle?.apply {
+                            // Spremi podatke kao stringove jer UserInput nije Parcelable
+                            set("customBirthdate", customInput.birthdate)
+                            set("customGender", customInput.gender.name)
+                            set("customZodiacSign", customInput.zodiacSign?.displayName ?: "")
+                            set("customPersonName", personName)
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("AppNavHost", "✅ Saved to savedStateHandle")
+                            }
                         }
                     }
                     nav.navigate(Routes.CupEditor)
@@ -129,21 +143,56 @@ fun AppNavHost(
             val readingMode = remember {
                 backStackEntry.savedStateHandle.get<String>("readingMode") ?: "instant"
             }
+            // Dohvati custom podatke iz savedStateHandle
+            val customBirthdate = remember {
+                backStackEntry.savedStateHandle.get<String>("customBirthdate")
+            }
+            val customGender = remember {
+                backStackEntry.savedStateHandle.get<String>("customGender")
+            }
+            val customZodiacSign = remember {
+                backStackEntry.savedStateHandle.get<String>("customZodiacSign")
+            }
+            val customPersonName = remember {
+                backStackEntry.savedStateHandle.get<String>("customPersonName") ?: ""
+            }
+            
             // ViewModel za custom UserInput - osiguraj da je isti instance
             val readingForOthersVm: com.gatalinka.app.vm.ReadingForOthersViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
                 key = "reading_for_others_shared"
             )
             
-            // Provjeri da li je customUserInput postavljen u ViewModelu
-            LaunchedEffect(Unit) {
-                val customInput = readingForOthersVm.customUserInput
-                if (com.gatalinka.app.BuildConfig.DEBUG) {
-                    android.util.Log.d("AppNavHost", "=== CupEditor: Checking ViewModel state ===")
-                    android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
-                    customInput?.let { cui ->
-                        android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
-                        android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
-                        android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+            // Restore customUserInput u ViewModel iz savedStateHandle
+            LaunchedEffect(customBirthdate, customGender, customZodiacSign, customPersonName) {
+                if (customBirthdate != null && customGender != null && customZodiacSign != null) {
+                    // Rekonstruiraj UserInput
+                    val gender = try {
+                        com.gatalinka.app.data.Gender.valueOf(customGender)
+                    } catch (e: Exception) {
+                        com.gatalinka.app.data.Gender.Unspecified
+                    }
+                    val zodiacSign = com.gatalinka.app.util.ZodiacSign.values().find { 
+                        it.displayName == customZodiacSign 
+                    }
+                    val customInput = com.gatalinka.app.data.UserInput(
+                        birthdate = customBirthdate,
+                        gender = gender,
+                        zodiacSign = zodiacSign,
+                        acceptedDisclaimer = true
+                    )
+                    readingForOthersVm.customUserInput = customInput
+                    readingForOthersVm.personName = customPersonName
+                    
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== CupEditor: Restored customUserInput ===")
+                        android.util.Log.d("AppNavHost", "  zodiacSign: ${zodiacSign?.displayName}")
+                        android.util.Log.d("AppNavHost", "  gender: ${gender.name}")
+                        android.util.Log.d("AppNavHost", "  birthdate: $customBirthdate")
+                        android.util.Log.d("AppNavHost", "  personName: $customPersonName")
+                    }
+                } else {
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== CupEditor: No customUserInput in savedStateHandle ===")
                     }
                 }
             }
@@ -160,6 +209,15 @@ fun AppNavHost(
                             android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
                             android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
                             android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                        }
+                    }
+                    // Proslijedi podatke kroz savedStateHandle
+                    if (customInput != null) {
+                        backStackEntry.savedStateHandle.apply {
+                            set("customBirthdate", customInput.birthdate)
+                            set("customGender", customInput.gender.name)
+                            set("customZodiacSign", customInput.zodiacSign?.displayName ?: "")
+                            set("customPersonName", readingForOthersVm.personName)
                         }
                     }
                     // Koristi selectedMode iz CupEditorScreen (može se promijeniti)
@@ -188,16 +246,51 @@ fun AppNavHost(
                 key = "reading_for_others_shared"
             )
             
-            // Provjeri da li je customUserInput postavljen u ViewModelu
-            LaunchedEffect(Unit) {
-                val customInput = readingForOthersVm.customUserInput
-                if (com.gatalinka.app.BuildConfig.DEBUG) {
-                    android.util.Log.d("AppNavHost", "=== ReadCup: Checking ViewModel state ===")
-                    android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
-                    customInput?.let { cui ->
-                        android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
-                        android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
-                        android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+            // Dohvati custom podatke iz savedStateHandle prethodnog ekrana
+            val customBirthdate = remember {
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customBirthdate")
+            }
+            val customGender = remember {
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customGender")
+            }
+            val customZodiacSign = remember {
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customZodiacSign")
+            }
+            val customPersonName = remember {
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customPersonName") ?: ""
+            }
+            
+            // Restore customUserInput u ViewModel iz savedStateHandle
+            LaunchedEffect(customBirthdate, customGender, customZodiacSign, customPersonName) {
+                if (customBirthdate != null && customGender != null && customZodiacSign != null) {
+                    // Rekonstruiraj UserInput
+                    val gender = try {
+                        com.gatalinka.app.data.Gender.valueOf(customGender)
+                    } catch (e: Exception) {
+                        com.gatalinka.app.data.Gender.Unspecified
+                    }
+                    val zodiacSign = com.gatalinka.app.util.ZodiacSign.values().find { 
+                        it.displayName == customZodiacSign 
+                    }
+                    val customInput = com.gatalinka.app.data.UserInput(
+                        birthdate = customBirthdate,
+                        gender = gender,
+                        zodiacSign = zodiacSign,
+                        acceptedDisclaimer = true
+                    )
+                    readingForOthersVm.customUserInput = customInput
+                    readingForOthersVm.personName = customPersonName
+                    
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== ReadCup: Restored customUserInput ===")
+                        android.util.Log.d("AppNavHost", "  zodiacSign: ${zodiacSign?.displayName}")
+                        android.util.Log.d("AppNavHost", "  gender: ${gender.name}")
+                        android.util.Log.d("AppNavHost", "  birthdate: $customBirthdate")
+                        android.util.Log.d("AppNavHost", "  personName: $customPersonName")
+                    }
+                } else {
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== ReadCup: No customUserInput in savedStateHandle ===")
                     }
                 }
             }
