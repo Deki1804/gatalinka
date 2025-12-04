@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "253930174034",
+    "project_id": "gatalinka-230f9",
+    "storage_bucket": "gatalinka-230f9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:253930174034:android:07112dba436aafb812d18b",
+        "android_client_info": {
+          "package_name": "com.gatalinka.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "253930174034-qcag6hthb953qqrdh31jbltqpsh5cint.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gatalinka.app",
+            "certificate_hash": "ab76ed3e0c48e3daca17e197b910c99885ffcb73"
+          }
+        },
+        {
+          "client_id": "253930174034-f9su74ckmll14gaqelpo9ng046lnvjpq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbFwSVVfp40kGJbzcVxR-abgilds8Q31Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "253930174034-0vqk1021d09n0rbnkgtjvhvthqd5tcnq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

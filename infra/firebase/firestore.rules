@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper funkcija za provjeru autentifikacije
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper funkcija za provjeru da li je korisnik vlasnik resursa
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection - korisnici mogu čitati i pisati samo svoje podatke
+    match /users/{userId} {
+      // Korisnik može čitati i pisati samo svoje podatke
+      allow read, write: if isOwner(userId);
+      
+      // Users/{userId}/readings subcollection
+      match /readings/{readingId} {
+        // Korisnik može čitati i pisati samo svoja čitanja
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    // Readings collection - samo Firebase Functions (admin) mogu pisati
+    // Klijenti mogu čitati samo svoja čitanja
+    match /readings/{readingId} {
+      // Korisnik može čitati samo svoja čitanja (gdje je userId == request.auth.uid)
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == request.auth.uid;
+      
+      // Pisanje je dozvoljeno samo za Firebase Functions (admin SDK)
+      // Klijenti ne mogu direktno pisati u ovu kolekciju
+      allow write: if false; // Samo admin SDK može pisati (kroz Firebase Functions)
+    }
+  }
+}
+

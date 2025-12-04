@@ -1,3 +1,24 @@
-<resources>
+﻿<resources>
     <string name="app_name">Gatalinka</string>
+    <string name="cta_start">Započni gatanje</string>
+    <string name="subtitle">AI gatanje iz šalice kave — zabavnog karaktera</string>
+
+    <string name="disclaimer_title">Važna napomena</string>
+    <string name="disclaimer_text">Gatalinka je isključivo zabavnog karaktera. Ne donositi važne odluke na temelju rezultata.</string>
+    <string name="accept_and_continue">Prihvaćam i nastavi</string>
+
+    <string name="form_title">Osnovni podaci</string>
+    <string name="label_birthdate">Datum rođenja (DD.MM.GGGG)</string>
+    <string name="label_gender">Spol</string>
+    <string name="gender_male">Muški</string>
+    <string name="gender_female">Ženski</string>
+    <string name="gender_other">Drugo / ne želim reći</string>
+    <string name="action_continue">Nastavi</string>
+
+    <string name="done_title">Spremni smo!</string>
+    <string name="done_text">Hvala! Sljedeći korak je fotografiranje šalice i prvo "čitanje".</string>
+    <string name="go_to_home">Idemo dalje</string>
+    
+    <!-- Google Sign In - Web Client ID -->
+    <string name="default_web_client_id" translatable="false">253930174034-0vqk1021d09n0rbnkgtjvhvthqd5tcnq.apps.googleusercontent.com</string>
 </resources>

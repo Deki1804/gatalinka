@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper funkcija za provjeru autentifikacije
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper funkcija za provjeru da li je korisnik vlasnik resursa
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Readings folder - korisnici mogu uploadati i čitati samo svoje slike
+    match /readings/{userId}/{allPaths=**} {
+      // Korisnik može čitati i pisati samo svoje slike
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Sve ostalo je zabranjeno
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

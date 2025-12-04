@@ -15,8 +15,24 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.gatalinka.app.BuildConfig
 import com.gatalinka.app.data.UserPreferencesRepository
-import com.gatalinka.app.ui.screens.*
+import com.gatalinka.app.ui.screens.CupEditorScreen
+import com.gatalinka.app.ui.screens.DailyReadingScreen
+import com.gatalinka.app.ui.screens.HomeScreen
+import com.gatalinka.app.ui.screens.LoginScreen
+import com.gatalinka.app.ui.screens.MyReadingsScreen
+import com.gatalinka.app.ui.screens.OnboardingFlowScreen
+import com.gatalinka.app.ui.screens.PrivacyPolicyScreen
+import com.gatalinka.app.ui.screens.ProfileScreen
+import com.gatalinka.app.ui.screens.ReadCupScreen
+import com.gatalinka.app.ui.screens.ReadingForOthersScreen
+import com.gatalinka.app.ui.screens.ReadingModeSelectionScreen
+import com.gatalinka.app.ui.screens.ReadingResultScreen
+import com.gatalinka.app.ui.screens.RegisterScreen
+import com.gatalinka.app.ui.screens.SchoolOfReadingScreen
+import com.gatalinka.app.ui.screens.SettingsScreen
+import com.gatalinka.app.ui.screens.TermsOfUseScreen
 import com.gatalinka.app.ui.components.LoadingScreen
 import com.gatalinka.app.util.ErrorMessages
 
@@ -55,7 +71,7 @@ fun AppNavHost(
                     // Provjeri da li je customUserInput postavljen prije navigacije
                     val customInput = readingForOthersVm.customUserInput
                     val personName = readingForOthersVm.personName
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== Navigating to CupEditor ===")
                         android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
                         customInput?.let { cui ->
@@ -72,7 +88,7 @@ fun AppNavHost(
                             set("customGender", customInput.gender.name)
                             set("customZodiacSign", customInput.zodiacSign?.displayName ?: "")
                             set("customPersonName", personName)
-                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                            if (BuildConfig.DEBUG) {
                                 android.util.Log.d("AppNavHost", "✅ Saved to savedStateHandle (ReadingForOthers)")
                             }
                         }
@@ -183,7 +199,7 @@ fun AppNavHost(
                     readingForOthersVm.customUserInput = customInput
                     readingForOthersVm.personName = customPersonName
                     
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== CupEditor: Restored customUserInput ===")
                         android.util.Log.d("AppNavHost", "  zodiacSign: ${zodiacSign?.displayName}")
                         android.util.Log.d("AppNavHost", "  gender: ${gender.name}")
@@ -191,7 +207,7 @@ fun AppNavHost(
                         android.util.Log.d("AppNavHost", "  personName: $customPersonName")
                     }
                 } else {
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== CupEditor: No customUserInput in savedStateHandle ===")
                     }
                 }
@@ -202,7 +218,7 @@ fun AppNavHost(
                 onAnalyze = { imageUri, selectedMode ->
                     // Provjeri da li je customUserInput postavljen prije navigacije
                     val customInput = readingForOthersVm.customUserInput
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== CupEditor: Navigating to ReadCup ===")
                         android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
                         customInput?.let { cui ->
@@ -281,7 +297,7 @@ fun AppNavHost(
                     readingForOthersVm.customUserInput = customInput
                     readingForOthersVm.personName = customPersonName
                     
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== ReadCup: Restored customUserInput ===")
                         android.util.Log.d("AppNavHost", "  zodiacSign: ${zodiacSign?.displayName}")
                         android.util.Log.d("AppNavHost", "  gender: ${gender.name}")
@@ -289,7 +305,7 @@ fun AppNavHost(
                         android.util.Log.d("AppNavHost", "  personName: $customPersonName")
                     }
                 } else {
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== ReadCup: No customUserInput in savedStateHandle ===")
                     }
                 }
@@ -312,7 +328,7 @@ fun AppNavHost(
                     }
                 },
                 onViewResult = { result ->
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "onViewResult pozvan! luckScore=${result.luckScore}")
                     }
                     // Spremi rezultat u savedStateHandle trenutnog ekrana
@@ -348,13 +364,13 @@ fun AppNavHost(
             
             // Pokušaj dohvatiti rezultat
             LaunchedEffect(Unit) {
-                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                if (BuildConfig.DEBUG) {
                     android.util.Log.d("AppNavHost", "ReadingResultScreen: Pokušavam dohvatiti rezultat iz savedStateHandle")
                 }
                 val readingResult = savedStateHandle?.get<com.gatalinka.app.ui.model.GatalinkaReadingUiModel>("readingResult")
                 result = readingResult
                 if (readingResult == null) {
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.e("AppNavHost", "❌ Rezultat nije pronađen! Vraćam se nazad.")
                     }
                     // Ako nema rezultata, vrati se nazad
@@ -441,7 +457,7 @@ fun AppNavHost(
                     }
                 } catch (e: Exception) {
                     error = com.gatalinka.app.util.ErrorMessages.getErrorMessage(e)
-                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         android.util.Log.e("AppNavHost", "Error loading reading", e)
                     }
                 } finally {

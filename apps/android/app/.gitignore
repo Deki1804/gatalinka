@@ -1,1 +1,6 @@
 /build
+
+# Keystore files - NIKADA NE COMMIT-ATI!
+*.jks
+*.keystore
+keystore-info.txt
