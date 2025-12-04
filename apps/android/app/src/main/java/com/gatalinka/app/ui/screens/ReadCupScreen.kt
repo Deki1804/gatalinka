@@ -58,9 +58,9 @@ fun ReadCupScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<GatalinkaReadingUiModel?>(null) }
     
-    // Pokreni čitanje jednom - osvježi kada se promijeni imageUri
+    // Pokreni čitanje jednom - osvježi kada se promijeni imageUri ili customUserInput
     // Koristi viewModelScope da se API poziv ne prekine ako kompozicija napusti
-    LaunchedEffect(imageUri) {
+    LaunchedEffect(imageUri, readingForOthersVm.customUserInput) {
         isLoading = true
         errorMessage = null
         result = null

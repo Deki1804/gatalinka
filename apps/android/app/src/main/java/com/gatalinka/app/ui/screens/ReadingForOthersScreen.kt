@@ -241,25 +241,43 @@ fun ReadingForOthersScreen(
                     keyboardController?.hide()
                     if (isReady) {
                         // VAŽNO: Osiguraj da se customUserInput postavi prije navigacije
-                        // Ako zodiac nije postavljen u ViewModelu, postavi ga sada
-                        val currentInput = vm.customUserInput
-                        if (currentInput == null || currentInput.zodiacSign == null) {
-                            // Osiguraj da je zodiac postavljen
-                            if (zodiac != null && isDateValid) {
-                                vm.updateBirthdate(birth.text)
-                            }
+                        // Osiguraj da su svi podaci postavljeni u ViewModelu
+                        if (zodiac != null && isDateValid) {
+                            // Osiguraj da je zodiac postavljen (možda je već postavljen, ali osiguraj)
+                            vm.updateBirthdate(birth.text)
                         }
+                        // Osiguraj da je gender postavljen
+                        vm.updateGender(gender)
+                        // Osiguraj da je ime postavljeno
+                        vm.updateName(name.text)
+                        
                         // Provjeri da li je sve postavljeno
                         val finalCustomInput = vm.customUserInput
                         if (com.gatalinka.app.BuildConfig.DEBUG) {
-                            android.util.Log.d("ReadingForOthersScreen", "Navigating to CupEditor")
+                            android.util.Log.d("ReadingForOthersScreen", "=== Navigating to CupEditor ===")
                             android.util.Log.d("ReadingForOthersScreen", "customUserInput != null: ${finalCustomInput != null}")
                             finalCustomInput?.let { cui ->
-                                android.util.Log.d("ReadingForOthersScreen", "zodiacSign: ${cui.zodiacSign?.displayName}")
-                                android.util.Log.d("ReadingForOthersScreen", "gender: ${cui.gender.name}")
-                                android.util.Log.d("ReadingForOthersScreen", "birthdate: ${cui.birthdate}")
+                                android.util.Log.d("ReadingForOthersScreen", "✅ zodiacSign: ${cui.zodiacSign?.displayName}")
+                                android.util.Log.d("ReadingForOthersScreen", "✅ gender: ${cui.gender.name}")
+                                android.util.Log.d("ReadingForOthersScreen", "✅ birthdate: ${cui.birthdate}")
+                                android.util.Log.d("ReadingForOthersScreen", "✅ personName: ${vm.personName}")
+                            } ?: run {
+                                android.util.Log.e("ReadingForOthersScreen", "❌ customUserInput is NULL!")
                             }
+                            android.util.Log.d("ReadingForOthersScreen", "=== End Navigation Check ===")
                         }
+                        
+                        // Provjeri da li je sve ispravno postavljeno prije navigacije
+                        if (finalCustomInput == null || 
+                            finalCustomInput.zodiacSign == null || 
+                            finalCustomInput.gender == com.gatalinka.app.data.Gender.Unspecified ||
+                            finalCustomInput.birthdate.isEmpty()) {
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.e("ReadingForOthersScreen", "❌ ERROR: customUserInput is incomplete! Not navigating.")
+                            }
+                            return@BeanCTA
+                        }
+                        
                         onContinue()
                     }
                 },

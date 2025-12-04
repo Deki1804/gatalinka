@@ -231,13 +231,10 @@ fun AppNavHost(
                         // Očisti custom UserInput
                         readingForOthersVm.clear()
                         // Navigiraj direktno na Home i očisti cijeli back stack
-                        // Provjeri da li Home postoji u back stacku
-                        val hasHomeInStack = nav.backQueue.any { it.destination.route == Routes.Home }
-                        if (hasHomeInStack) {
-                            // Ako Home postoji, popaj do njega
-                            nav.popBackStack(Routes.Home, inclusive = false)
-                        } else {
-                            // Ako Home ne postoji, navigiraj tamo i očisti sve
+                        // Pokušaj popati do Home, ako ne uspije navigiraj tamo
+                        val popped = nav.popBackStack(Routes.Home, inclusive = false)
+                        if (!popped) {
+                            // Ako Home ne postoji u back stacku, navigiraj tamo i očisti sve
                             nav.navigate(Routes.Home) {
                                 popUpTo(nav.graph.startDestinationId) { inclusive = true }
                                 launchSingleTop = true
@@ -248,10 +245,8 @@ fun AppNavHost(
                         // Očisti custom UserInput
                         readingForOthersVm.clear()
                         // Isti pristup kao za onBack
-                        val hasHomeInStack = nav.backQueue.any { it.destination.route == Routes.Home }
-                        if (hasHomeInStack) {
-                            nav.popBackStack(Routes.Home, inclusive = false)
-                        } else {
+                        val popped = nav.popBackStack(Routes.Home, inclusive = false)
+                        if (!popped) {
                             nav.navigate(Routes.Home) {
                                 popUpTo(nav.graph.startDestinationId) { inclusive = true }
                                 launchSingleTop = true
