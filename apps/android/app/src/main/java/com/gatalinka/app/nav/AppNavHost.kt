@@ -51,7 +51,20 @@ fun AppNavHost(
                     readingForOthersVm.clear()
                     nav.popBackStack() 
                 },
-                onContinue = { nav.navigate(Routes.CupEditor) }
+                onContinue = { 
+                    // Provjeri da li je customUserInput postavljen prije navigacije
+                    val customInput = readingForOthersVm.customUserInput
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== Navigating to CupEditor ===")
+                        android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
+                        customInput?.let { cui ->
+                            android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                            android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
+                            android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                        }
+                    }
+                    nav.navigate(Routes.CupEditor)
+                }
             )
         }
         composable(Routes.Login) {
@@ -116,9 +129,39 @@ fun AppNavHost(
             val readingMode = remember {
                 backStackEntry.savedStateHandle.get<String>("readingMode") ?: "instant"
             }
+            // ViewModel za custom UserInput - osiguraj da je isti instance
+            val readingForOthersVm: com.gatalinka.app.vm.ReadingForOthersViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                key = "reading_for_others_shared"
+            )
+            
+            // Provjeri da li je customUserInput postavljen u ViewModelu
+            LaunchedEffect(Unit) {
+                val customInput = readingForOthersVm.customUserInput
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("AppNavHost", "=== CupEditor: Checking ViewModel state ===")
+                    android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
+                    customInput?.let { cui ->
+                        android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                        android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
+                        android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                    }
+                }
+            }
+            
             CupEditorScreen(
                 onBack = { nav.popBackStack() },
                 onAnalyze = { imageUri, selectedMode ->
+                    // Provjeri da li je customUserInput postavljen prije navigacije
+                    val customInput = readingForOthersVm.customUserInput
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("AppNavHost", "=== CupEditor: Navigating to ReadCup ===")
+                        android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
+                        customInput?.let { cui ->
+                            android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                            android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
+                            android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                        }
+                    }
                     // Koristi selectedMode iz CupEditorScreen (može se promijeniti)
                     val encodedUri = java.net.URLEncoder.encode(imageUri, "UTF-8")
                     val encodedMode = java.net.URLEncoder.encode(selectedMode, "UTF-8")
@@ -144,6 +187,20 @@ fun AppNavHost(
             val readingForOthersVm: com.gatalinka.app.vm.ReadingForOthersViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
                 key = "reading_for_others_shared"
             )
+            
+            // Provjeri da li je customUserInput postavljen u ViewModelu
+            LaunchedEffect(Unit) {
+                val customInput = readingForOthersVm.customUserInput
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("AppNavHost", "=== ReadCup: Checking ViewModel state ===")
+                    android.util.Log.d("AppNavHost", "customUserInput != null: ${customInput != null}")
+                    customInput?.let { cui ->
+                        android.util.Log.d("AppNavHost", "  zodiacSign: ${cui.zodiacSign?.displayName}")
+                        android.util.Log.d("AppNavHost", "  gender: ${cui.gender.name}")
+                        android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
+                    }
+                }
+            }
             ReadCupScreen(
                 imageUri = imageUri,
                 readingMode = readingMode,
