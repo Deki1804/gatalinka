@@ -39,7 +39,7 @@ fun AppNavHost(
                 preferencesRepo = preferencesRepo
             )
         }
-        composable(Routes.ReadingForOthers) {
+        composable(Routes.ReadingForOthers) { backStackEntry ->
             // ViewModel za custom UserInput
             val readingForOthersVm: com.gatalinka.app.vm.ReadingForOthersViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
                 key = "reading_for_others_shared"
@@ -64,16 +64,16 @@ fun AppNavHost(
                             android.util.Log.d("AppNavHost", "  birthdate: ${cui.birthdate}")
                         }
                     }
-                    // Spremi podatke u savedStateHandle prije navigacije
+                    // Spremi podatke u savedStateHandle trenutnog ekrana prije navigacije
                     if (customInput != null) {
-                        nav.currentBackStackEntry?.savedStateHandle?.apply {
+                        backStackEntry.savedStateHandle.apply {
                             // Spremi podatke kao stringove jer UserInput nije Parcelable
                             set("customBirthdate", customInput.birthdate)
                             set("customGender", customInput.gender.name)
                             set("customZodiacSign", customInput.zodiacSign?.displayName ?: "")
                             set("customPersonName", personName)
                             if (com.gatalinka.app.BuildConfig.DEBUG) {
-                                android.util.Log.d("AppNavHost", "✅ Saved to savedStateHandle")
+                                android.util.Log.d("AppNavHost", "✅ Saved to savedStateHandle (ReadingForOthers)")
                             }
                         }
                     }
@@ -143,18 +143,18 @@ fun AppNavHost(
             val readingMode = remember {
                 backStackEntry.savedStateHandle.get<String>("readingMode") ?: "instant"
             }
-            // Dohvati custom podatke iz savedStateHandle
+            // Dohvati custom podatke iz savedStateHandle PRETHODNOG ekrana (ReadingForOthers)
             val customBirthdate = remember {
-                backStackEntry.savedStateHandle.get<String>("customBirthdate")
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customBirthdate")
             }
             val customGender = remember {
-                backStackEntry.savedStateHandle.get<String>("customGender")
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customGender")
             }
             val customZodiacSign = remember {
-                backStackEntry.savedStateHandle.get<String>("customZodiacSign")
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customZodiacSign")
             }
             val customPersonName = remember {
-                backStackEntry.savedStateHandle.get<String>("customPersonName") ?: ""
+                nav.previousBackStackEntry?.savedStateHandle?.get<String>("customPersonName") ?: ""
             }
             
             // ViewModel za custom UserInput - osiguraj da je isti instance
