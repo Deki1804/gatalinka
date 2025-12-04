@@ -25,7 +25,26 @@ export async function generateReadingWithGemini(
     throw new Error("Gemini API key nije proslijeđen.");
   }
   
-  const genAI = new GoogleGenerativeAI(apiKey);
+  // Remove BOM (Byte Order Mark) character if present (U+FEFF = 65279)
+  // This can happen when reading from Secret Manager
+  // Also remove any other invisible characters
+  let cleanedApiKey = apiKey.replace(/^\uFEFF/, '').trim();
+  
+  // If after trimming we only have BOM or empty, the secret is corrupted
+  // Try to get it from environment variable as fallback
+  if (!cleanedApiKey || cleanedApiKey.length === 0 || cleanedApiKey.charCodeAt(0) === 65279) {
+    console.warn("Secret Manager returned invalid API key, trying process.env fallback");
+    const envKey = process.env.GEMINI_API_KEY;
+    if (envKey && envKey.trim().length > 0) {
+      cleanedApiKey = envKey.replace(/^\uFEFF/, '').trim();
+    }
+  }
+  
+  if (!cleanedApiKey || cleanedApiKey.length === 0) {
+    throw new Error("Gemini API key je prazan nakon čišćenja. Provjerite Secret Manager konfiguraciju.");
+  }
+  
+  const genAI = new GoogleGenerativeAI(cleanedApiKey);
 
   try {
     // 1.5 modeli su povučeni – koristimo preporučeni 2.x model

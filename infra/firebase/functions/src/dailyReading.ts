@@ -58,7 +58,15 @@ export async function getDailyReading(
     throw new Error("Gemini API nije konfiguriran.");
   }
 
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  // Remove BOM (Byte Order Mark) character if present (U+FEFF = 65279)
+  // This can happen when reading from Secret Manager
+  const cleanedApiKey = geminiApiKey.replace(/^\uFEFF/, '').trim();
+  
+  if (!cleanedApiKey) {
+    throw new Error("Gemini API key je prazan nakon čišćenja.");
+  }
+
+  const genAI = new GoogleGenerativeAI(cleanedApiKey);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.0-flash",
   });

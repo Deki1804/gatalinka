@@ -1,5 +1,5 @@
 ﻿import * as admin from "firebase-admin";
-import { onCall } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { readCup } from "./readCup";
 import { getDailyReading } from "./dailyReading";
@@ -25,13 +25,37 @@ export const readCupCallable = onCall(
     console.log("request.auth?.uid:", request.auth?.uid);
     console.log("data keys:", Object.keys(request.data || {}));
     
+    // Check authentication
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Korisnik mora biti prijavljen da može čitati iz šalice."
+      );
+    }
+    
     // Convert v2 request to v1-style context for backward compatibility
     const context = {
       auth: request.auth,
       rawRequest: request.rawRequest,
     };
     
-    return readCup(request.data, context, geminiApiKey.value());
+    try {
+      // Get API key from secret - use .value() method
+      const apiKeyValue = geminiApiKey.value();
+      
+      return await readCup(request.data, context, apiKeyValue);
+    } catch (error: any) {
+      console.error("Error in readCup:", error);
+      // If it's already an HttpsError, rethrow it
+      if (error.code && error.message) {
+        throw error;
+      }
+      // Otherwise wrap it
+      throw new HttpsError(
+        "internal",
+        `Greška pri čitanju iz šalice: ${error.message || "Nepoznata greška"}`
+      );
+    }
   }
 );
 
@@ -49,12 +73,33 @@ export const getDailyReadingCallable = onCall(
     console.log("request.auth exists:", !!request.auth);
     console.log("request.auth?.uid:", request.auth?.uid);
     
+    // Check authentication
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Korisnik mora biti prijavljen."
+      );
+    }
+    
     // Convert v2 request to v1-style context for backward compatibility
     const context = {
       auth: request.auth,
       rawRequest: request.rawRequest,
     };
     
-    return getDailyReading(request.data, context, geminiApiKey.value());
+    try {
+      return await getDailyReading(request.data, context, geminiApiKey.value());
+    } catch (error: any) {
+      console.error("Error in getDailyReading:", error);
+      // If it's already an HttpsError, rethrow it
+      if (error.code && error.message) {
+        throw error;
+      }
+      // Otherwise wrap it
+      throw new HttpsError(
+        "internal",
+        `Greška pri dohvaćanju dnevnog čitanja: ${error.message || "Nepoznata greška"}`
+      );
+    }
   }
 );
