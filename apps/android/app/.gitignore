@@ -3,4 +3,5 @@
 # Keystore files - NIKADA NE COMMIT-ATI!
 *.jks
 *.keystore
+gatalinka-release-key*
 keystore-info.txt
