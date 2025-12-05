@@ -354,7 +354,10 @@ private fun HowToPhotoStep(onNext: () -> Unit, onBack: () -> Unit) {
             )
         ) {
             Column(
-                modifier = Modifier.padding(20.dp)
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 InstructionItem("1", "Popij kavu, ali ostavi talog na dnu")
                 Spacer(modifier = Modifier.height(12.dp))
@@ -417,7 +420,10 @@ private fun WhatAppDoesStep(onNext: () -> Unit, onBack: () -> Unit) {
             )
         ) {
             Column(
-                modifier = Modifier.padding(20.dp)
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 FeatureItem(Icons.Default.ImageSearch, "AI analizira simbole u talogu")
                 Spacer(modifier = Modifier.height(16.dp))
@@ -478,12 +484,18 @@ private fun YourDataStep(onNext: () -> Unit, onBack: () -> Unit) {
             )
         ) {
             Column(
-                modifier = Modifier.padding(20.dp)
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "Za personalizirano čitanje trebamo:",
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
                 )
                 
                 DataItem("📅", "Datum rođenja", "Za izračun horoskopskog znaka")
@@ -495,7 +507,9 @@ private fun YourDataStep(onNext: () -> Unit, onBack: () -> Unit) {
                 Text(
                     "Svi podaci su sigurni i privatni. Koristimo ih samo za tvoje čitanje!",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
