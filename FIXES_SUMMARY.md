@@ -49,3 +49,4 @@ ReadCupScreen: Using userInput: zodiac=Lav, gender=Female
 **JA NISAM DEPLOY-ao Cloud Functions** - to moraš ti napraviti na Firebase konzoli. Provjeri da li tvoja Cloud Function (`readCupCallable`) pravilno koristi `zodiacSign` i `gender` parametre iz `data` objekta.
 
 
+

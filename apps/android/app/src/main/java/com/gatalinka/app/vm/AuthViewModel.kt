@@ -1,5 +1,6 @@
 package com.gatalinka.app.vm
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -56,10 +57,12 @@ class AuthViewModel : ViewModel() {
             _errorMessage.value = null
             
             try {
+                Log.d("AuthViewModel", "Pokušavam prijavu sa emailom: ${email.take(3)}...")
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user = result.user
                 
                 if (user != null) {
+                    Log.d("AuthViewModel", "✅ Uspješna prijava: ${user.uid}")
                     _authState.value = AuthState.Authenticated(
                         userId = user.uid,
                         email = user.email,
@@ -68,7 +71,12 @@ class AuthViewModel : ViewModel() {
                 }
                 _isLoading.value = false
             } catch (e: Exception) {
+                Log.e("AuthViewModel", "❌ Greška pri email prijavi: ${e.message}", e)
                 _errorMessage.value = when {
+                    e.message?.contains("not allowed", ignoreCase = true) == true ||
+                    e.message?.contains("sign-in provider is disabled", ignoreCase = true) == true ||
+                    e.message?.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) == true ->
+                        "Email/Password prijava nije omogućena u Firebase projektu. Molimo kontaktirajte administratora."
                     e.message?.contains("email") == true -> "Email adresa nije valjana"
                     e.message?.contains("password") == true -> "Lozinka nije ispravna"
                     e.message?.contains("user") == true && e.message?.contains("found") == true -> "Korisnik s ovim emailom ne postoji"
@@ -109,6 +117,10 @@ class AuthViewModel : ViewModel() {
                 _isLoading.value = false
             } catch (e: Exception) {
                 _errorMessage.value = when {
+                    e.message?.contains("not allowed", ignoreCase = true) == true ||
+                    e.message?.contains("sign-in provider is disabled", ignoreCase = true) == true ||
+                    e.message?.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) == true ->
+                        "Email/Password registracija nije omogućena u Firebase projektu. Molimo kontaktirajte administratora."
                     e.message?.contains("email") == true -> "Email adresa nije valjana ili već postoji"
                     e.message?.contains("password") == true -> "Lozinka mora imati najmanje 6 znakova"
                     e.message?.contains("already") == true -> "Korisnik s ovim emailom već postoji"
@@ -130,11 +142,13 @@ class AuthViewModel : ViewModel() {
             _errorMessage.value = null
             
             try {
+                Log.d("AuthViewModel", "Pokušavam Google prijavu sa ID tokenom")
                 val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
                 val result = auth.signInWithCredential(credential).await()
                 val user = result.user
                 
                 if (user != null) {
+                    Log.d("AuthViewModel", "✅ Uspješna Google prijava: ${user.uid}")
                     _authState.value = AuthState.Authenticated(
                         userId = user.uid,
                         email = user.email,
@@ -143,8 +157,14 @@ class AuthViewModel : ViewModel() {
                 }
                 _isLoading.value = false
             } catch (e: Exception) {
+                Log.e("AuthViewModel", "❌ Greška pri Google prijavi: ${e.message}", e)
                 _errorMessage.value = when {
+                    e.message?.contains("not allowed", ignoreCase = true) == true ||
+                    e.message?.contains("sign-in provider is disabled", ignoreCase = true) == true ||
+                    e.message?.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) == true ->
+                        "Google prijava nije omogućena u Firebase projektu. Molimo kontaktirajte administratora."
                     e.message?.contains("network") == true -> "Provjeri internetsku vezu"
+                    e.message?.contains("10:", ignoreCase = true) == true -> "Google prijava nije uspjela. Pokušajte ponovo."
                     else -> e.message ?: "Greška pri Google prijavi"
                 }
                 _isLoading.value = false
