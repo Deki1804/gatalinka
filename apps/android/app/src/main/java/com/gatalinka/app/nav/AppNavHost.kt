@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -17,6 +18,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.gatalinka.app.BuildConfig
 import com.gatalinka.app.data.UserPreferencesRepository
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import com.gatalinka.app.ui.screens.CupEditorScreen
 import com.gatalinka.app.ui.screens.DailyReadingScreen
 import com.gatalinka.app.ui.screens.HomeScreen
@@ -134,12 +139,78 @@ fun AppNavHost(
             )
         }
         composable(Routes.Onboarding) {
+            // Automatska navigacija kada se onboarding završi
+            val hasCompletedOnboarding by preferencesRepo.hasCompletedOnboarding.collectAsState(initial = false)
+            val scope = rememberCoroutineScope()
+            
+            androidx.compose.runtime.LaunchedEffect(hasCompletedOnboarding) {
+                android.util.Log.e("GATALINKA_NAV", "=== LaunchedEffect TRIGGERED ===")
+                android.util.Log.e("GATALINKA_NAV", "hasCompletedOnboarding=$hasCompletedOnboarding")
+                android.util.Log.e("GATALINKA_NAV", "currentRoute=${nav.currentDestination?.route}")
+                
+                if (hasCompletedOnboarding && nav.currentDestination?.route == Routes.Onboarding) {
+                    android.util.Log.e("GATALINKA_NAV", ">>> USLOV ZADOVOLJEN, navigiram na Home")
+                    try {
+                        nav.navigate(Routes.Home) {
+                            popUpTo(nav.graph.startDestinationId) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                        android.util.Log.e("GATALINKA_NAV", ">>> LaunchedEffect navigacija POZVANA")
+                    } catch (e: Exception) {
+                        android.util.Log.e("GATALINKA_NAV", ">>> LaunchedEffect GREŠKA: ${e.message}", e)
+                    }
+                } else {
+                    android.util.Log.e("GATALINKA_NAV", ">>> USLOV NIJE ZADOVOLJEN (hasCompleted=$hasCompletedOnboarding, route=${nav.currentDestination?.route})")
+                }
+            }
+            
             OnboardingFlowScreen(
                 preferencesRepo = preferencesRepo,
                 onComplete = {
-                    // Nakon onboardinga, idi na Home
-                    nav.navigate(Routes.Home) {
-                        popUpTo(Routes.Login) { inclusive = true }
+                    android.util.Log.e("GATALINKA_NAV", "=== onComplete CALLBACK U AppNavHost ===")
+                    android.util.Log.e("GATALINKA_NAV", "Current route: ${nav.currentDestination?.route}")
+                    
+                    // Provjeri da li je onboarding zaista završen prije navigacije
+                    scope.launch {
+                        try {
+                            // Čekaj malo da se DataStore ažurira
+                            kotlinx.coroutines.delay(200)
+                            
+                            // Provjeri da li je onboarding završen
+                            val hasCompleted = preferencesRepo.hasCompletedOnboarding.first()
+                            android.util.Log.e("GATALINKA_NAV", ">>> hasCompletedOnboarding nakon delay: $hasCompleted")
+                            
+                            // Navigiraj na UI thread
+                            withContext(Dispatchers.Main) {
+                                // Nakon onboardinga, idi na Home - jednostavna navigacija
+                                try {
+                                    android.util.Log.e("GATALINKA_NAV", ">>> Navigiram na Home")
+                                    nav.navigate(Routes.Home) {
+                                        // Obriši Onboarding iz back stacka
+                                        popUpTo(Routes.Onboarding) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                    android.util.Log.e("GATALINKA_NAV", ">>> Navigacija na Home uspješna")
+                                } catch (e: Exception) {
+                                    android.util.Log.e("GATALINKA_NAV", ">>> GREŠKA pri navigaciji: ${e.message}", e)
+                                    e.printStackTrace()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("GATALINKA_NAV", ">>> GREŠKA u onComplete: ${e.message}", e)
+                            e.printStackTrace()
+                            // Ipak pokušaj navigirati
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    nav.navigate(Routes.Home) {
+                                        popUpTo(Routes.Onboarding) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                } catch (navError: Exception) {
+                                    android.util.Log.e("GATALINKA_NAV", ">>> GREŠKA pri fallback navigaciji: ${navError.message}", navError)
+                                }
+                            }
+                        }
                     }
                 }
             )
@@ -210,6 +281,17 @@ fun AppNavHost(
                     if (BuildConfig.DEBUG) {
                         android.util.Log.d("AppNavHost", "=== CupEditor: No customUserInput in savedStateHandle ===")
                     }
+                }
+            }
+            
+            // Provjeri da li treba automatski otvoriti galeriju
+            val openGallery = remember {
+                backStackEntry.savedStateHandle.get<Boolean>("openGallery") ?: false
+            }
+            // Očisti flag nakon što se pročita
+            LaunchedEffect(openGallery) {
+                if (openGallery) {
+                    backStackEntry.savedStateHandle.remove<Boolean>("openGallery")
                 }
             }
             
@@ -393,6 +475,7 @@ fun AppNavHost(
                 ReadingResultScreen(
                     result = currentResult,
                     imageUri = resultImageUri,
+                    preferencesRepo = preferencesRepo,
                     onBack = { 
                         // Očisti custom UserInput
                         readingForOthersVm.clear()
@@ -406,6 +489,15 @@ fun AppNavHost(
                                 launchSingleTop = true
                             }
                         }
+                    },
+                    onRetryFromGallery = {
+                        // Navigiraj natrag na CupEditorScreen i postavi flag da treba otvoriti galeriju
+                        // Pronađi CupEditorScreen entry u back stacku
+                        val cupEditorEntry = nav.getBackStackEntry(Routes.CupEditor)
+                        // Postavi flag u savedStateHandle da treba otvoriti galeriju
+                        cupEditorEntry.savedStateHandle["openGallery"] = true
+                        // Navigiraj na CupEditorScreen (popaj natrag do tamo)
+                        nav.popBackStack(Routes.CupEditor, inclusive = false)
                     },
                     onSave = { 
                         // Očisti custom UserInput
@@ -496,6 +588,7 @@ fun AppNavHost(
                     ReadingResultScreen(
                         result = uiModel,
                         imageUri = reading!!.imageUri,
+                        preferencesRepo = preferencesRepo,
                         onBack = { nav.popBackStack() },
                         onSave = { nav.popBackStack() }
                     )
@@ -528,7 +621,8 @@ fun AppNavHost(
                         popUpTo(Routes.Login) { inclusive = true }
                     }
                 },
-                navController = nav
+                navController = nav,
+                preferencesRepo = preferencesRepo
             )
         }
         composable(Routes.PrivacyPolicy) {

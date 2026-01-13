@@ -1,6 +1,8 @@
 package com.gatalinka.app.ui.screens
 
 import android.net.Uri
+import android.content.Intent
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,9 +70,43 @@ enum class ReadingMode(val displayName: String, val description: String) {
 fun CupEditorScreen(
     onBack: () -> Unit,
     onAnalyze: (String, String) -> Unit, // imageUri, readingMode
-    initialReadingMode: String = "instant"
+    initialReadingMode: String = "instant",
+    openGallery: Boolean = false // Flag za automatsko otvaranje galerije
 ) {
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    // Koristi rememberSaveable s custom saver za Uri da se osigura pravilno spremanje
+    // VAŽNO: Uri se mora spremiti kao String jer rememberSaveable ne može direktno spremiti Uri
+    // Koristi key da se osigura da se state ne resetira nakon recompozicije
+    val uriSaver = remember {
+        Saver<Uri?, String>(
+            save = { uri ->
+                val uriString = uri?.toString() ?: ""
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("CupEditorScreen", "Saving URI to state: $uriString")
+                }
+                uriString
+            },
+            restore = { value ->
+                if (value.isNotEmpty()) {
+                    try {
+                        android.net.Uri.parse(value)
+                    } catch (e: Exception) {
+                        if (com.gatalinka.app.BuildConfig.DEBUG) {
+                            android.util.Log.e("CupEditorScreen", "Error parsing URI from saved state: ${e.message}", e)
+                        }
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+        )
+    }
+    
+    // VAŽNO: Koristi rememberSaveable da se state ne resetira nakon recompozicije
+    // ALI: Resetiraj state eksplicitno prije launchanja pickera da se ne koriste cached selectioni
+    var imageUri by rememberSaveable(
+        stateSaver = uriSaver
+    ) { mutableStateOf<Uri?>(null) }
     var isCameraMode by remember { mutableStateOf(false) }
     var baseScale by remember { mutableStateOf(1f) }
     var rotation by remember { mutableStateOf(0f) }
@@ -116,10 +154,60 @@ fun CupEditorScreen(
         permissions = listOf(android.Manifest.permission.READ_MEDIA_IMAGES)
     )
 
+    // Koristi GetContent() za single selection - garantira single selection bez multi UI
+    // VAŽNO: Launcher MORA biti na top-levelu composable-a, NE u if-u ili LaunchedEffect
+    // VAŽNO: GetContent() nema "2 selected" badge i "Gotovo" gumb - to je single picker
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { imageUri = it }
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            android.util.Log.d("CupEditorScreen", "=== Image picker result ===")
+            android.util.Log.d("CupEditorScreen", "uri: $uri")
+            android.util.Log.d("CupEditorScreen", "uri != null: ${uri != null}")
+            android.util.Log.d("CupEditorScreen", "uri.toString(): ${uri?.toString()}")
+        }
+        
+        // VAŽNO: onResult mora REPLACE-ati state, ne appendati
+        // Provjeri da URI nije null i da je valjan
+        if (uri != null && uri.toString().isNotEmpty()) {
+            try {
+                // VAŽNO: Callback se već poziva na UI thread-u, tako da možemo direktno postaviti imageUri
+                // VAŽNO: NE resetiraj imageUri na null prije postavljanja - to može uzrokovati da se UI resetira
+                // Samo REPLACE state direktno
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("CupEditorScreen", "=== Image picker result ===")
+                    android.util.Log.d("CupEditorScreen", "uri: $uri")
+                    android.util.Log.d("CupEditorScreen", "imageUri BEFORE set: $imageUri")
+                }
+                // REPLACE state direktno - ne resetiraj na null prije
+                imageUri = uri
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("CupEditorScreen", "✅ Image URI set successfully: $imageUri")
+                    android.util.Log.d("CupEditorScreen", "✅ imageUri != null after set: ${imageUri != null}")
+                    android.util.Log.d("CupEditorScreen", "✅ imageUri.toString(): ${imageUri?.toString()}")
+                }
+                // Resetiraj transformacije kada se odabere nova slika
+                baseScale = 1f
+                rotation = 0f
+                flipHorizontal = false
+                flipVertical = false
+                offsetX = 0f
+                offsetY = 0f
+            } catch (e: Exception) {
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.e("CupEditorScreen", "❌ Error setting image URI: ${e.message}", e)
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.w("CupEditorScreen", "⚠️ Image selection cancelled or failed - uri is null or empty")
+                android.util.Log.w("CupEditorScreen", "uri: $uri")
+                android.util.Log.w("CupEditorScreen", "uri?.toString(): ${uri?.toString()}")
+            }
+            // VAŽNO: Ako je odabir otkazan, NE resetiraj imageUri - zadrži postojeću sliku ako postoji
+            // Resetiranje na null može uzrokovati da se UI resetira na početni screen
+        }
     }
 
     Box(
@@ -141,7 +229,35 @@ fun CupEditorScreen(
             )
         )
 
+        // Automatski otvori galeriju ako je flag postavljen
+        LaunchedEffect(openGallery, imageUri, galleryPermissionState.allPermissionsGranted) {
+            if (openGallery && imageUri == null) {
+                // Provjeri permissions i otvori galeriju
+                if (galleryPermissionState.allPermissionsGranted) {
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("CupEditorScreen", "Auto-opening gallery from retry")
+                    }
+                    imagePickerLauncher.launch("image/*")
+                } else {
+                    galleryPermissionState.launchMultiplePermissionRequest()
+                }
+            }
+        }
+        
+        // Loguj trenutno stanje imageUri za debug
+        LaunchedEffect(imageUri) {
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("CupEditorScreen", "=== LaunchedEffect: imageUri changed ===")
+                android.util.Log.d("CupEditorScreen", "imageUri: $imageUri")
+                android.util.Log.d("CupEditorScreen", "imageUri != null: ${imageUri != null}")
+                android.util.Log.d("CupEditorScreen", "imageUri?.toString(): ${imageUri?.toString()}")
+            }
+        }
+        
         if (imageUri == null) {
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("CupEditorScreen", "=== Rendering picker options (imageUri is null) ===")
+            }
             if (!isCameraMode) {
                 // No image - show picker options
                 Column(
@@ -164,8 +280,18 @@ fun CupEditorScreen(
                     ) {
                         Button(
                             onClick = {
+                                // VAŽNO: Log da vidimo koji launcher se stvarno pali
+                                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                    android.util.Log.d("CupEditorScreen", "=== CLICK gallery -> launching GET_CONTENT ===")
+                                    android.util.Log.d("CupEditorScreen", "Current imageUri: $imageUri")
+                                }
+                                
                                 // GetContent() ne treba permission na Android 13+, ali provjerimo za starije verzije
                                 if (galleryPermissionState.allPermissionsGranted) {
+                                    // GetContent() garantira single selection bez multi UI (nema "2 selected" badge)
+                                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                        android.util.Log.d("CupEditorScreen", "Launching GetContent() with single selection")
+                                    }
                                     imagePickerLauncher.launch("image/*")
                                 } else {
                                     galleryPermissionState.launchMultiplePermissionRequest()
@@ -450,8 +576,21 @@ fun CupEditorScreen(
                     BeanCTA(
                         label = "Analiziraj šalicu",
                         onClick = {
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("CupEditorScreen", "=== Analiziraj button clicked ===")
+                                android.util.Log.d("CupEditorScreen", "imageUri: $imageUri")
+                                android.util.Log.d("CupEditorScreen", "imageUri != null: ${imageUri != null}")
+                            }
                             if (imageUri != null) {
-                                onAnalyze(imageUri.toString(), selectedMode.name.lowercase())
+                                val uriString = imageUri.toString()
+                                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                    android.util.Log.d("CupEditorScreen", "Calling onAnalyze with: $uriString")
+                                }
+                                onAnalyze(uriString, selectedMode.name.lowercase())
+                            } else {
+                                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                    android.util.Log.e("CupEditorScreen", "ERROR: imageUri is null, cannot analyze!")
+                                }
                             }
                         }
                     )

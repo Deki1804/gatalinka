@@ -66,13 +66,31 @@ fun LoginScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            android.util.Log.d("LoginScreen", "🔍 Google Sign-In launcher callback triggered")
+            android.util.Log.d("LoginScreen", "Result code: ${result.resultCode}")
+            android.util.Log.d("LoginScreen", "Data: ${result.data != null}")
+        }
+        
         coroutineScope.launch {
-            val idToken = GoogleSignInHelper.getSignInResult(result.data)
+            val (idToken, errorMessage) = GoogleSignInHelper.getSignInResult(result.data)
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("LoginScreen", "🔍 getSignInResult returned: idToken=${idToken != null}, error=${errorMessage != null}")
+            }
             
             if (idToken != null) {
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("LoginScreen", "✅ Calling signInWithGoogleIdToken")
+                }
                 viewModel.signInWithGoogleIdToken(idToken)
+            } else {
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.e("LoginScreen", "❌ Google Sign-In failed: $errorMessage")
+                }
+                // Postavi error poruku ako je došlo do greške
+                viewModel.setError(errorMessage ?: "Google prijava nije uspjela. Pokušaj ponovo.")
             }
-            // Ako nema token-a, error će biti postavljen u ViewModel-u
         }
     }
 
@@ -278,16 +296,38 @@ fun LoginScreen(
                 // Google Sign In Button
                 OutlinedButton(
                     onClick = {
+                        if (com.gatalinka.app.BuildConfig.DEBUG) {
+                            android.util.Log.d("LoginScreen", "🔍 Google Sign-In button clicked")
+                        }
                         try {
                             val webClientId = context.resources.getString(com.gatalinka.app.R.string.default_web_client_id)
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("LoginScreen", "🔍 Google Sign-In: Web Client ID = $webClientId")
+                            }
                             if (webClientId == "YOUR_WEB_CLIENT_ID_HERE" || webClientId.isEmpty()) {
-                                // Web Client ID nije postavljen - error će biti prikazan
+                                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                    android.util.Log.e("LoginScreen", "❌ Web Client ID nije postavljen")
+                                }
+                                viewModel.setError("Web Client ID nije konfigurisan. Kontaktiraj administratora.")
                                 return@OutlinedButton
+                            }
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("LoginScreen", "✅ Pokretanje Google Sign-In flow-a...")
                             }
                             val googleSignInClient = GoogleSignInHelper.getGoogleSignInClient(context, webClientId)
                             val signInIntent = GoogleSignInHelper.getSignInIntent(googleSignInClient)
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("LoginScreen", "✅ Launching Google Sign-In intent...")
+                            }
                             googleSignInLauncher.launch(signInIntent)
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.d("LoginScreen", "✅ Google Sign-In intent launched")
+                            }
                         } catch (e: Exception) {
+                            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                                android.util.Log.e("LoginScreen", "❌ Greška pri pokretanju Google Sign-In", e)
+                                android.util.Log.e("LoginScreen", "Stack trace:", e)
+                            }
                             viewModel.setError(ErrorMessages.getErrorMessage(e))
                         }
                     },

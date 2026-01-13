@@ -14,11 +14,35 @@
       },
       "oauth_client": [
         {
-          "client_id": "253930174034-qcag6hthb953qqrdh31jbltqpsh5cint.apps.googleusercontent.com",
+          "client_id": "253930174034-n0sdjntftcgegva8fmvbmgmh4kng1kv7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gatalinka.app",
+            "certificate_hash": "c7a4243bcb91335e64b43045fabad42bc438e67f"
+          }
+        },
+        {
+          "client_id": "253930174034-on69066nmdqn15bt2o3e1qivdtmgaq1d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gatalinka.app",
+            "certificate_hash": "aabe53c1e91197af79a06ea81dc305d6a1026879"
+          }
+        },
+        {
+          "client_id": "253930174034-pb7vein0tfg2i56j0n01o3msfrpicm53.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.gatalinka.app",
             "certificate_hash": "ab76ed3e0c48e3daca17e197b910c99885ffcb73"
+          }
+        },
+        {
+          "client_id": "253930174034-qgo9p91uefge9fj3e2vl0nh1saf2lg26.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gatalinka.app",
+            "certificate_hash": "d62119222c473b0a27bb65c944195ac586c14a86"
           }
         },
         {

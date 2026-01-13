@@ -45,6 +45,11 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
     }
     
     suspend fun saveUserInput(input: UserInput) {
+        android.util.Log.e("GATALINKA_DATASTORE", "=== saveUserInput POZVAN ===")
+        android.util.Log.e("GATALINKA_DATASTORE", "birthdate='${input.birthdate}'")
+        android.util.Log.e("GATALINKA_DATASTORE", "gender=${input.gender.name}")
+        android.util.Log.e("GATALINKA_DATASTORE", "zodiacSign=${input.zodiacSign?.name}")
+        
         dataStore.edit { preferences ->
             preferences[UserPreferencesKeys.BIRTHDATE] = input.birthdate
             preferences[UserPreferencesKeys.GENDER] = input.gender.name
@@ -52,12 +57,30 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
                 preferences[UserPreferencesKeys.ZODIAC_SIGN] = it.name
             }
             preferences[UserPreferencesKeys.HAS_COMPLETED_ONBOARDING] = true
+            android.util.Log.e("GATALINKA_DATASTORE", ">>> HAS_COMPLETED_ONBOARDING postavljen na TRUE")
         }
+        
+        android.util.Log.e("GATALINKA_DATASTORE", ">>> saveUserInput ZAVRŠEN")
     }
     
     suspend fun clearOnboarding() {
         dataStore.edit { preferences ->
             preferences[UserPreferencesKeys.HAS_COMPLETED_ONBOARDING] = false
+        }
+    }
+    
+    /**
+     * Briše sve korisničke podatke iz DataStore-a.
+     * Koristi se pri brisanju računa.
+     */
+    suspend fun clearAllUserData() {
+        dataStore.edit { preferences ->
+            preferences.remove(UserPreferencesKeys.BIRTHDATE)
+            preferences.remove(UserPreferencesKeys.GENDER)
+            preferences.remove(UserPreferencesKeys.ZODIAC_SIGN)
+            preferences.remove(UserPreferencesKeys.HAS_COMPLETED_ONBOARDING)
+            preferences.remove(UserPreferencesKeys.DAILY_READING_CACHE)
+            preferences.remove(UserPreferencesKeys.DAILY_READING_DATE)
         }
     }
     

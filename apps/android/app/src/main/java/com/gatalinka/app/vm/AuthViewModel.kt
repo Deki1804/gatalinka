@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -204,6 +205,49 @@ class AuthViewModel : ViewModel() {
                 email = user.email,
                 displayName = user.displayName
             )
+        }
+    }
+    
+    /**
+     * Briše korisnički račun i sve povezane podatke.
+     * - Briše sve čitanja iz Firestore (users/{userId}/readings)
+     * - Briše sve dnevna čitanja iz Firestore (users/{userId}/dailyReadings)
+     * - Briše Firebase Auth account
+     */
+    suspend fun deleteAccount(): Result<Unit> {
+        val user = auth.currentUser
+        if (user == null) {
+            return Result.failure(IllegalStateException("Korisnik nije prijavljen"))
+        }
+        
+        val userId = user.uid
+        val firestore = FirebaseFirestore.getInstance()
+        
+        return try {
+            // 1. Obriši sva čitanja
+            val readingsSnapshot = firestore.collection("users/$userId/readings").get().await()
+            readingsSnapshot.documents.forEach { document ->
+                document.reference.delete().await()
+            }
+            
+            // 2. Obriši sva dnevna čitanja
+            val dailyReadingsSnapshot = firestore.collection("users/$userId/dailyReadings").get().await()
+            dailyReadingsSnapshot.documents.forEach { document ->
+                document.reference.delete().await()
+            }
+            
+            // 3. Obriši Firebase Auth account
+            user.delete().await()
+            
+            // 4. Odjavi korisnika
+            auth.signOut()
+            _authState.value = AuthState.NotAuthenticated
+            
+            Log.d("AuthViewModel", "✅ Račun uspješno obrisan: $userId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("AuthViewModel", "❌ Greška pri brisanju računa: ${e.message}", e)
+            Result.failure(e)
         }
     }
 }

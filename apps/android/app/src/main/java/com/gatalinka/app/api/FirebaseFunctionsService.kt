@@ -51,12 +51,32 @@ object FirebaseFunctionsService {
         userInput: UserInput? = null,
         readingMode: String = "instant"
     ): GatalinkaReadingDto {
+        // DETALJNO LOGIRANJE - svaki API poziv
+        val callId = System.currentTimeMillis()
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            Log.w("🔥 API_CALL", "=== readCup CALL #$callId ===")
+            Log.w("🔥 API_CALL", "imageUri: $imageUri")
+            Log.w("🔥 API_CALL", "readingMode: $readingMode")
+            Log.w("🔥 API_CALL", "Thread: ${Thread.currentThread().name}")
+            Log.w("🔥 API_CALL", "Stack trace:")
+            Thread.currentThread().stackTrace.take(5).forEach { 
+                Log.w("🔥 API_CALL", "  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
+            }
+        }
+        
         try {
             // Provjeri da li je korisnik prijavljen - koristi istu instancu kao AuthViewModel
             val auth = Firebase.auth
             val currentUser = auth.currentUser
             if (currentUser == null) {
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    Log.e("🔥 API_CALL", "❌ CALL #$callId FAILED: User not authenticated")
+                }
                 throw IllegalStateException("Korisnik mora biti prijavljen da može čitati iz šalice.")
+            }
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                Log.w("🔥 API_CALL", "✅ CALL #$callId: User authenticated: ${currentUser.uid}")
             }
             
             // Osvježi ID token da osiguramo da je validan
@@ -77,6 +97,30 @@ object FirebaseFunctionsService {
                 }
                 throw e
             }
+            
+            // 1. LOG "DOKAZ" DA SU SLIKE RAZLIČITE
+            val imageBytes = android.util.Base64.decode(imageBase64.replace("data:image/jpeg;base64,", ""), android.util.Base64.DEFAULT)
+            val imageHash = java.security.MessageDigest.getInstance("SHA-256").digest(imageBytes)
+            val hashString = imageHash.joinToString("") { "%02x".format(it) }
+            val imageSize = imageBytes.size
+            
+            // Dobij dimensions
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, options)
+            val imageDimensions = "${options.outWidth}x${options.outHeight}"
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("API_CALL", "=== IMAGE FINGERPRINT (ANDROID) ===")
+                android.util.Log.d("API_CALL", "Image URI: $imageUri")
+                android.util.Log.d("API_CALL", "Image hash (SHA-256): $hashString")
+                android.util.Log.d("API_CALL", "Image size: $imageSize bytes")
+                android.util.Log.d("API_CALL", "Image dimensions: $imageDimensions")
+                android.util.Log.d("API_CALL", "Base64 length: ${imageBase64.length} characters")
+                android.util.Log.d("API_CALL", "====================================")
+            }
+            
             if (com.gatalinka.app.BuildConfig.DEBUG) {
                 Log.d("FirebaseFunctionsService", "Image converted to base64, length: ${imageBase64.length}")
             }
@@ -230,25 +274,122 @@ object FirebaseFunctionsService {
      * Mapira Cloud Function odgovor u GatalinkaReadingDto.
      */
     private fun mapToReadingDto(data: Map<String, Any>): GatalinkaReadingDto {
+        // Tolerant parsing za visible_symbols - probaj snake_case i camelCase
+        val visibleSymbolsRaw = data["visible_symbols"] ?: data["visibleSymbols"]
+        val visibleSymbols = when {
+            visibleSymbolsRaw is List<*> -> {
+                visibleSymbolsRaw.mapNotNull { symbolObj ->
+                    if (symbolObj is Map<*, *>) {
+                        // Tolerant parsing: probaj symbol/name i meaning/desc
+                        val symbol = (symbolObj["symbol"] as? String) 
+                            ?: (symbolObj["name"] as? String)
+                            ?: ""
+                        val meaning = (symbolObj["meaning"] as? String)
+                            ?: (symbolObj["desc"] as? String)
+                            ?: (symbolObj["description"] as? String)
+                            ?: ""
+                        
+                        if (symbol.isNotEmpty()) {
+                            com.gatalinka.app.api.dto.VisibleSymbolDto(
+                                symbol = symbol,
+                                meaning = meaning.ifEmpty { "Simbol u šalici" }
+                            )
+                        } else null
+                    } else if (symbolObj is String) {
+                        // Fallback: ako je samo string, koristi ga kao symbol
+                        com.gatalinka.app.api.dto.VisibleSymbolDto(
+                            symbol = symbolObj,
+                            meaning = "Simbol u šalici"
+                        )
+                    } else null
+                }
+            }
+            visibleSymbolsRaw is String -> {
+                // Ako je string umjesto array, probaj parsirati kao JSON
+                emptyList()
+            }
+            else -> emptyList()
+        }
+        
+        // Tolerant parsing za interpretation - probaj različite ključeve
+        val interpretation = (data["interpretation"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["how_to_interpret"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["howToInterpret"] as? String)?.takeIf { it.isNotBlank() }
+        
+        // Tolerant parsing za advice
+        val advice = (data["advice"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["tip"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["savjet"] as? String)?.takeIf { it.isNotBlank() }
+        
+        // Tolerant parsing za horoscope_match
+        val horoscopeMatch = (data["horoscope_match"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["horoscopeMatch"] as? String)?.takeIf { it.isNotBlank() }
+        
+        // Log error code i image fingerprint za debugging
+        val errorCode = (data["error_code"] as? String) ?: (data["errorCode"] as? String)
+        val imageHash = (data["image_hash"] as? String) ?: (data["imageHash"] as? String)
+        val imageSize = (data["image_size"] as? Number)?.toInt() ?: (data["imageSize"] as? Number)?.toInt()
+        val imageDimensions = (data["image_dimensions"] as? String) ?: (data["imageDimensions"] as? String)
+        
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            android.util.Log.d("API_CALL", "=== READING RESPONSE DEBUG ===")
+            android.util.Log.d("API_CALL", "error_code: $errorCode")
+            android.util.Log.d("API_CALL", "image_hash: $imageHash")
+            android.util.Log.d("API_CALL", "image_size: $imageSize bytes")
+            android.util.Log.d("API_CALL", "image_dimensions: $imageDimensions")
+            android.util.Log.d("API_CALL", "visible_symbols count: ${visibleSymbols.size}")
+            android.util.Log.d("API_CALL", "symbols: ${visibleSymbols.map { it.symbol }.joinToString(", ")}")
+            android.util.Log.d("API_CALL", "================================")
+        }
+        
         return GatalinkaReadingDto(
-            mainText = data["main_text"] as? String ?: "",
-            love = data["love"] as? String ?: "",
-            work = data["work"] as? String ?: "",
-            money = data["money"] as? String ?: "",
-            health = data["health"] as? String ?: "",
-            symbols = (data["symbols"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-            luckyNumbers = (data["lucky_numbers"] as? List<*>)?.mapNotNull {
+            mainText = (data["main_text"] as? String) ?: (data["mainText"] as? String) ?: "",
+            visibleSymbols = visibleSymbols.ifEmpty { null },
+            interpretation = interpretation,
+            advice = advice,
+            love = (data["love"] as? String) ?: "",
+            work = (data["work"] as? String) ?: "",
+            money = (data["money"] as? String) ?: "",
+            health = (data["health"] as? String) ?: "",
+            symbols = (data["symbols"] as? List<*>)?.mapNotNull { 
                 when (it) {
-                    is Number -> it.toInt()
+                    is String -> it
+                    is Map<*, *> -> (it["symbol"] as? String) ?: (it["name"] as? String)
                     else -> null
                 }
             } ?: emptyList(),
-            luckScore = (data["luck_score"] as? Number)?.toInt() ?: 0,
-            mantra = data["mantra"] as? String ?: "Danas je dan za nove mogućnosti.",
-            energyScore = (data["energy_score"] as? Number)?.toInt() ?: 50,
-            isValidCup = data["is_valid_cup"] as? Boolean ?: false,
-            safetyLevel = data["safety_level"] as? String ?: "unknown",
-            reason = data["reason"] as? String ?: ""
+            luckyNumbers = (data["lucky_numbers"] as? List<*>)?.mapNotNull {
+                when (it) {
+                    is Number -> it.toInt()
+                    is String -> it.toIntOrNull()
+                    else -> null
+                }
+            } ?: (data["luckyNumbers"] as? List<*>)?.mapNotNull {
+                when (it) {
+                    is Number -> it.toInt()
+                    is String -> it.toIntOrNull()
+                    else -> null
+                }
+            } ?: emptyList(),
+            luckScore = ((data["luck_score"] as? Number)?.toInt()) 
+                ?: ((data["luckScore"] as? Number)?.toInt()) 
+                ?: 0,
+            mantra = (data["mantra"] as? String) ?: "Danas je dan za nove mogućnosti.",
+            energyScore = ((data["energy_score"] as? Number)?.toInt())
+                ?: ((data["energyScore"] as? Number)?.toInt())
+                ?: 50,
+            isValidCup = (data["is_valid_cup"] as? Boolean) 
+                ?: (data["isValidCup"] as? Boolean) 
+                ?: false,
+            safetyLevel = (data["safety_level"] as? String)
+                ?: (data["safetyLevel"] as? String)
+                ?: "unknown",
+            reason = (data["reason"] as? String) ?: "",
+            horoscopeMatch = horoscopeMatch,
+            errorCode = errorCode,
+            imageHash = imageHash,
+            imageSize = imageSize,
+            imageDimensions = imageDimensions
         )
     }
     
@@ -261,11 +402,31 @@ object FirebaseFunctionsService {
     suspend fun getDailyReading(
         userInput: UserInput? = null
     ): GatalinkaReadingDto {
+        // DETALJNO LOGIRANJE - svaki API poziv
+        val callId = System.currentTimeMillis()
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            Log.w("🔥 API_CALL", "=== getDailyReading CALL #$callId ===")
+            Log.w("🔥 API_CALL", "zodiacSign: ${userInput?.zodiacSign?.displayName}")
+            Log.w("🔥 API_CALL", "gender: ${userInput?.gender?.name}")
+            Log.w("🔥 API_CALL", "Thread: ${Thread.currentThread().name}")
+            Log.w("🔥 API_CALL", "Stack trace:")
+            Thread.currentThread().stackTrace.take(5).forEach { 
+                Log.w("🔥 API_CALL", "  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
+            }
+        }
+        
         try {
             val auth = Firebase.auth
             val currentUser = auth.currentUser
             if (currentUser == null) {
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    Log.e("🔥 API_CALL", "❌ CALL #$callId FAILED: User not authenticated")
+                }
                 throw IllegalStateException("Korisnik mora biti prijavljen.")
+            }
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                Log.w("🔥 API_CALL", "✅ CALL #$callId: User authenticated: ${currentUser.uid}")
             }
             
             val functions = getFunctions()
@@ -278,10 +439,14 @@ object FirebaseFunctionsService {
             )
             
             if (com.gatalinka.app.BuildConfig.DEBUG) {
-                Log.d("FirebaseFunctionsService", "Calling getDailyReading with zodiacSign: ${userInput?.zodiacSign?.displayName}")
+                Log.w("🔥 API_CALL", "📤 CALL #$callId: Sending request to Firebase Functions")
             }
             
             val result = callable.call(data).await()
+            
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                Log.w("🔥 API_CALL", "✅ CALL #$callId: Response received successfully")
+            }
             // Parsiraj rezultat
             @Suppress("UNCHECKED_CAST")
             val resultData = result.data as? Map<String, Any>

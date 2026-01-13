@@ -59,19 +59,19 @@ fun MysticBackground(
                 )
             )
     ) {
-        // Dodaj zvijezde/iskrice
-        Sparkles()
+        // Dodaj zvijezde/iskrice - optimizirano (manje čestica)
+        Sparkles(particleCount = 20)
         
         // Sadržaj ekrana
         content()
         
-        // Dim na dnu (overlay)
-        SmokeEffect(modifier = Modifier.fillMaxSize())
+        // Dim na dnu (overlay) - onemogućen za bolje performanse
+        // SmokeEffect(modifier = Modifier.fillMaxSize())
     }
 }
 
 @Composable
-fun Sparkles(particleCount: Int = 50) {
+fun Sparkles(particleCount: Int = 20) {
     val infiniteTransition = rememberInfiniteTransition(label = "sparkles")
     val time by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -210,6 +210,7 @@ fun PulsingText(
     androidx.compose.material3.Text(
         text = text,
         style = style,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = modifier.scale(scale)
     )
 }

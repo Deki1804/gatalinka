@@ -77,6 +77,14 @@ class ReadingForOthersViewModel : ViewModel() {
                 // Mapiraj u UI model
                 val uiModel = GatalinkaReadingUiModel(
                     mainText = response.mainText,
+                    visibleSymbols = response.visibleSymbols?.map { 
+                        com.gatalinka.app.ui.model.VisibleSymbol(
+                            symbol = it.symbol,
+                            meaning = it.meaning
+                        )
+                    },
+                    interpretation = response.interpretation,
+                    advice = response.advice,
                     love = response.love,
                     work = response.work,
                     money = response.money,
@@ -85,7 +93,8 @@ class ReadingForOthersViewModel : ViewModel() {
                     luckyNumbers = response.luckyNumbers,
                     luckScore = response.luckScore,
                     mantra = response.mantra,
-                    energyScore = response.energyScore
+                    energyScore = response.energyScore,
+                    horoscopeMatch = response.horoscopeMatch?.takeIf { it.isNotBlank() }
                 )
                 
                 onSuccess(uiModel)

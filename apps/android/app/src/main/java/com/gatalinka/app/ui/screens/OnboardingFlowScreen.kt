@@ -1,17 +1,22 @@
 package com.gatalinka.app.ui.screens
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -36,30 +41,33 @@ import com.gatalinka.app.data.Gender
 import com.gatalinka.app.data.UserPreferencesRepository
 import com.gatalinka.app.ui.components.MysticBackground
 import com.gatalinka.app.ui.components.PulsingText
-import com.gatalinka.app.ui.design.BeanCTA
 import com.gatalinka.app.ui.design.GataUI
 import com.gatalinka.app.util.DateValidators
 import com.gatalinka.app.util.DobFormatter
 import com.gatalinka.app.util.ZodiacSign
 import com.gatalinka.app.vm.OnboardingViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 
 enum class OnboardingStep {
-    WELCOME,
-    HYPE, // Novi vizualni hype ekran
+    HYPE, // Welcome ekran - "Dobrodošao u Gatalinku"
     HOW_TO_PHOTO,
     WHAT_APP_DOES,
     YOUR_DATA,
     FORM
 }
 
+@SuppressLint("UnrememberedMutableState")
 @Composable
 fun OnboardingFlowScreen(
     preferencesRepo: UserPreferencesRepository,
     vm: OnboardingViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onComplete: () -> Unit
 ) {
-    var currentStep by remember { mutableStateOf(OnboardingStep.WELCOME) }
+    var currentStep by remember { mutableStateOf(OnboardingStep.HYPE) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     
@@ -71,21 +79,27 @@ fun OnboardingFlowScreen(
     }
     var gender by remember { mutableStateOf(savedUserInput.gender) }
     
-    // Ažuriraj kada se učitaju podaci
+    // Ažuriraj kada se učitaju podaci - SAMO ako korisnik još nije unio podatke
     LaunchedEffect(savedUserInput.birthdate) {
-        if (savedUserInput.birthdate.isNotEmpty() && birth.text != savedUserInput.birthdate) {
+        // Ažuriraj samo ako je savedUserInput.birthdate različit od trenutnog i ako je birth prazan
+        // Ovo sprječava resetiranje podataka koje je korisnik već unio
+        if (savedUserInput.birthdate.isNotEmpty() && birth.text.isEmpty() && birth.text != savedUserInput.birthdate) {
+            android.util.Log.e("GATALINKA_ONBOARDING", "LaunchedEffect: učitavam savedUserInput.birthdate='${savedUserInput.birthdate}'")
             birth = TextFieldValue(savedUserInput.birthdate)
             gender = savedUserInput.gender
         }
     }
 
-    val isDateValid = remember(birth.text) { 
+    // Koristi derivedStateOf za brže ažuriranje kada se birth.text promijeni
+    val isDateValid = androidx.compose.runtime.derivedStateOf { 
         DateValidators.isValidDob(birth.text)
-    }
-    val zodiac = remember(birth.text) { 
+    }.value
+    val zodiac = androidx.compose.runtime.derivedStateOf { 
         if (isDateValid) com.gatalinka.app.util.ZodiacCalculator.calculateZodiac(birth.text) else null 
-    }
-    val isReady = isDateValid && gender != Gender.Unspecified
+    }.value
+    val isReady = androidx.compose.runtime.derivedStateOf {
+        isDateValid && gender != Gender.Unspecified
+    }.value
 
     MysticBackground {
         Column(
@@ -94,16 +108,14 @@ fun OnboardingFlowScreen(
                 .padding(horizontal = GataUI.ScreenPadding)
         ) {
             // Progress indicator
-            if (currentStep != OnboardingStep.WELCOME) {
-                LinearProgressIndicator(
-                    progress = { (currentStep.ordinal.toFloat() / (OnboardingStep.entries.size - 1)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
+            LinearProgressIndicator(
+                progress = { (currentStep.ordinal.toFloat() / (OnboardingStep.entries.size - 1)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
 
             // Content with animation
             AnimatedContent(
@@ -121,12 +133,8 @@ fun OnboardingFlowScreen(
                 label = "onboarding_step"
             ) { step ->
                 when (step) {
-                    OnboardingStep.WELCOME -> WelcomeStep(
-                        onNext = { currentStep = OnboardingStep.HYPE }
-                    )
                     OnboardingStep.HYPE -> HypeStep(
-                        onNext = { currentStep = OnboardingStep.HOW_TO_PHOTO },
-                        onBack = { currentStep = OnboardingStep.WELCOME }
+                        onNext = { currentStep = OnboardingStep.HOW_TO_PHOTO }
                     )
                     OnboardingStep.HOW_TO_PHOTO -> HowToPhotoStep(
                         onNext = { currentStep = OnboardingStep.WHAT_APP_DOES },
@@ -147,34 +155,27 @@ fun OnboardingFlowScreen(
                                 tf.text,
                                 tf.selection.end
                             )
+                            android.util.Log.e("GATALINKA_ONBOARDING", "onBirthChange: old='${birth.text}', new='$txt'")
                             birth = TextFieldValue(txt, TextRange(pos))
                             vm.updateBirthdate(txt)
+                            android.util.Log.e("GATALINKA_ONBOARDING", "onBirthChange: birth.text nakon update='${birth.text}'")
                         },
                         gender = gender,
                         onGenderChange = { g ->
                             keyboardController?.hide()
+                            android.util.Log.e("GATALINKA_ONBOARDING", "onGenderChange: old=${gender.name}, new=${g.name}")
                             gender = g
                             vm.updateGender(g)
+                            android.util.Log.e("GATALINKA_ONBOARDING", "onGenderChange: gender nakon update=${gender.name}")
                         },
-                        isDateValid = isDateValid,
-                        zodiac = zodiac,
-                        isReady = isReady,
+                        scope = scope,
+                        preferencesRepo = preferencesRepo,
+                        vm = vm,
                         onComplete = {
                             keyboardController?.hide()
-                            if (isReady) {
-                                vm.acceptDisclaimer()
-                                scope.launch {
-                                    preferencesRepo.saveUserInput(
-                                        com.gatalinka.app.data.UserInput(
-                                            birthdate = birth.text,
-                                            gender = gender,
-                                            zodiacSign = zodiac,
-                                            acceptedDisclaimer = true
-                                        )
-                                    )
-                                }
-                                onComplete()
-                            }
+                            // onComplete se poziva direktno iz FormStep nakon što su podaci spremljeni
+                            // Ovdje samo pozivamo parent onComplete za navigaciju
+                            onComplete()
                         },
                         onBack = { currentStep = OnboardingStep.YOUR_DATA }
                     )
@@ -185,59 +186,7 @@ fun OnboardingFlowScreen(
 }
 
 @Composable
-private fun WelcomeStep(onNext: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // Animated icon
-        val infiniteTransition = rememberInfiniteTransition(label = "welcome_icon")
-        val scale by infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 1.1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(2000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "icon_scale"
-        )
-
-        Text(
-            text = "☕",
-            fontSize = 120.sp,
-            modifier = Modifier
-                .scale(scale)
-                .padding(bottom = 32.dp)
-        )
-
-        PulsingText(
-            text = "Dobrodošli u Gatalinku",
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontSize = 32.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-            ),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        Text(
-            text = "AI gatanje iz šalice kave",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.padding(bottom = 48.dp)
-        )
-
-        BeanCTA(
-            label = "Započni",
-            onClick = onNext
-        )
-    }
-}
-
-@Composable
-private fun HypeStep(onNext: () -> Unit, onBack: () -> Unit) {
+private fun HypeStep(onNext: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "hype")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -299,7 +248,9 @@ private fun HypeStep(onNext: () -> Unit, onBack: () -> Unit) {
                 fontSize = 32.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             ),
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
         )
         
         Text(
@@ -309,15 +260,51 @@ private fun HypeStep(onNext: () -> Unit, onBack: () -> Unit) {
             modifier = Modifier.padding(bottom = 48.dp)
         )
         
-        BeanCTA(
-            label = "Započni putovanje",
-            onClick = onNext
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        TextButton(onClick = onBack) {
-            Text("Nazad")
+        // Mistični circular button s pulsating glow
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val infiniteTransition3 = rememberInfiniteTransition(label = "hype_button_glow")
+            val glowAlpha3 by infiniteTransition3.animateFloat(
+                initialValue = 0.4f,
+                targetValue = 0.8f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(2000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "glow"
+            )
+            
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                GataUI.MysticGold.copy(alpha = glowAlpha3),
+                                Color.Transparent
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+                    .clickable(onClick = onNext)
+                    .border(
+                        width = 2.dp,
+                        color = GataUI.MysticGold.copy(alpha = 0.6f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🔮",
+                    fontSize = 40.sp
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Započni putovanje",
+                style = MaterialTheme.typography.titleMedium,
+                color = GataUI.MysticGold
+            )
         }
     }
 }
@@ -375,15 +362,73 @@ private fun HowToPhotoStep(onNext: () -> Unit, onBack: () -> Unit) {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) {
-                Text("Nazad")
+            // Nazad gumb - ikona u krugu
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            color = Color(0xFF2D1B4E).copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Nazad",
+                        tint = GataUI.MysticGold.copy(alpha = 0.8f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-            BeanCTA(
-                label = "Dalje",
-                onClick = onNext
-            )
+            
+            // Glavni gumb - circular s glow
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val infiniteTransition5 = rememberInfiniteTransition(label = "howto_button_glow")
+                val glowAlpha5 by infiniteTransition5.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 0.8f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "glow"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    GataUI.MysticGold.copy(alpha = glowAlpha5),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                        .clickable(onClick = onNext)
+                        .border(
+                            width = 2.dp,
+                            color = GataUI.MysticGold.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Dalje",
+                        tint = GataUI.MysticGold,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -439,15 +484,73 @@ private fun WhatAppDoesStep(onNext: () -> Unit, onBack: () -> Unit) {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) {
-                Text("Nazad")
+            // Nazad gumb - ikona u krugu
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            color = Color(0xFF2D1B4E).copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Nazad",
+                        tint = GataUI.MysticGold.copy(alpha = 0.8f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-            BeanCTA(
-                label = "Dalje",
-                onClick = onNext
-            )
+            
+            // Glavni gumb - circular s glow
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val infiniteTransition6 = rememberInfiniteTransition(label = "whatapp_button_glow")
+                val glowAlpha6 by infiniteTransition6.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 0.8f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "glow"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    GataUI.MysticGold.copy(alpha = glowAlpha6),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                        .clickable(onClick = onNext)
+                        .border(
+                            width = 2.dp,
+                            color = GataUI.MysticGold.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Dalje",
+                        tint = GataUI.MysticGold,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -518,15 +621,73 @@ private fun YourDataStep(onNext: () -> Unit, onBack: () -> Unit) {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) {
-                Text("Nazad")
+            // Nazad gumb - ikona u krugu
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            color = Color(0xFF2D1B4E).copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Nazad",
+                        tint = GataUI.MysticGold.copy(alpha = 0.8f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-            BeanCTA(
-                label = "Dalje",
-                onClick = onNext
-            )
+            
+            // Glavni gumb - circular s glow
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val infiniteTransition7 = rememberInfiniteTransition(label = "yourdata_button_glow")
+                val glowAlpha7 by infiniteTransition7.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 0.8f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "glow"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    GataUI.MysticGold.copy(alpha = glowAlpha7),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                        .clickable(onClick = onNext)
+                        .border(
+                            width = 2.dp,
+                            color = GataUI.MysticGold.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Dalje",
+                        tint = GataUI.MysticGold,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -537,13 +698,41 @@ private fun FormStep(
     onBirthChange: (TextFieldValue) -> Unit,
     gender: Gender,
     onGenderChange: (Gender) -> Unit,
-    isDateValid: Boolean,
-    zodiac: ZodiacSign?,
-    isReady: Boolean,
+    scope: CoroutineScope,
+    preferencesRepo: UserPreferencesRepository,
+    vm: OnboardingViewModel,
     onComplete: () -> Unit,
     onBack: () -> Unit
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
+    
+    // Loguj vrijednosti kada se FormStep recomponira
+    LaunchedEffect(birth.text, gender) {
+        android.util.Log.e("GATALINKA_ONBOARDING", "FormStep recomponiran: birth.text='${birth.text}', gender=${gender.name}")
+    }
+    
+    // Računaj validacije direktno u FormStep da se ažuriraju kada se birth ili gender promijene
+    val isDateValid by remember(birth.text) { 
+        derivedStateOf { 
+            val valid = DateValidators.isValidDob(birth.text)
+            android.util.Log.e("GATALINKA_ONBOARDING", "FormStep: isDateValid=$valid za birth.text='${birth.text}'")
+            valid
+        }
+    }
+    val zodiac by remember(birth.text, isDateValid) { 
+        derivedStateOf { 
+            val z = if (isDateValid) com.gatalinka.app.util.ZodiacCalculator.calculateZodiac(birth.text) else null
+            android.util.Log.e("GATALINKA_ONBOARDING", "FormStep: zodiac=${z?.displayName} za birth.text='${birth.text}'")
+            z
+        }
+    }
+    val isReady by remember(isDateValid, gender) { 
+        derivedStateOf { 
+            val ready = isDateValid && gender != Gender.Unspecified
+            android.util.Log.e("GATALINKA_ONBOARDING", "FormStep: isReady=$ready (isDateValid=$isDateValid, gender=${gender.name})")
+            ready
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -567,16 +756,16 @@ private fun FormStep(
         OutlinedTextField(
             value = birth,
             onValueChange = onBirthChange,
-            label = { Text("Datum rođenja (DD.MM.GGGG)") },
+            label = { Text("Datum rođenja") },
+            placeholder = { Text("Dan kad si rođen/a") },
             isError = birth.text.isNotBlank() && birth.text.length >= 10 && !isDateValid,
             supportingText = {
                 if (birth.text.isNotBlank() && birth.text.length >= 10 && !isDateValid) {
                     Text("Unesite ispravan datum, npr. 05.11.1990")
-                } else if (zodiac != null) {
-                    Text("${zodiac.emoji} ${zodiac.displayName}")
                 } else if (birth.text.isNotBlank() && birth.text.length < 10) {
                     Text("Unesite datum u formatu DD.MM.GGGG")
                 }
+                // SAKRIVAMO prikaz znaka (Ovan) - znak ostaje interno, ali se ne prikazuje
             },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
@@ -608,15 +797,149 @@ private fun FormStep(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) {
-                Text("Nazad")
+            // Nazad gumb - ikona u krugu umjesto teksta
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            color = Color(0xFF2D1B4E).copy(alpha = 0.6f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Nazad",
+                        tint = GataUI.MysticGold.copy(alpha = 0.8f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-            BeanCTA(
-                label = if (isReady) "Započni gatanje" else "Popuni sve",
-                onClick = onComplete
-            )
+            
+            // Glavni gumb - veći, magičniji, s pulsirajućim glow-om
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f)
+            ) {
+                // Pulsirajući glow efekt
+                val infiniteTransition = rememberInfiniteTransition(label = "button_glow")
+                val glowAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 0.8f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "glow"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    GataUI.MysticGold.copy(alpha = glowAlpha),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .clickable(enabled = isReady) {
+                            if (isReady) {
+                                android.util.Log.e("GATALINKA_ONBOARDING", "=== GUMB KLIKNUT ===")
+                                android.util.Log.e("GATALINKA_ONBOARDING", "isReady=$isReady")
+                                android.util.Log.e("GATALINKA_ONBOARDING", "birth.text='${birth.text}'")
+                                android.util.Log.e("GATALINKA_ONBOARDING", "gender=${gender.name}")
+                                android.util.Log.e("GATALINKA_ONBOARDING", "isDateValid=$isDateValid")
+                                android.util.Log.e("GATALINKA_ONBOARDING", "zodiac=${zodiac?.displayName}")
+                                
+                                android.util.Log.e("GATALINKA_ONBOARDING", ">>> isReady=TRUE, SPREMA PODATKE")
+                                keyboardController?.hide()
+                                scope.launch {
+                                    try {
+                                        // Spremi podatke
+                                        preferencesRepo.saveUserInput(
+                                            com.gatalinka.app.data.UserInput(
+                                                birthdate = birth.text,
+                                                gender = gender,
+                                                zodiacSign = zodiac,
+                                                acceptedDisclaimer = true
+                                            )
+                                        )
+                                        vm.acceptDisclaimer()
+                                        
+                                        // Čekaj malo da se DataStore edit završi
+                                        kotlinx.coroutines.delay(100)
+                                        
+                                        // Provjeri da li je onboarding zaista završen
+                                        val hasCompleted = preferencesRepo.hasCompletedOnboarding.first()
+                                        android.util.Log.e("GATALINKA_ONBOARDING", ">>> hasCompletedOnboarding nakon spremanja: $hasCompleted")
+                                        
+                                        android.util.Log.e("GATALINKA_ONBOARDING", ">>> Podaci spremljeni, pozivam onComplete")
+                                        // Navigiraj na UI thread
+                                        withContext(Dispatchers.Main) {
+                                            onComplete()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("GATALINKA_ONBOARDING", ">>> GREŠKA pri spremanju: ${e.message}", e)
+                                        e.printStackTrace()
+                                        // Ipak navigiraj da korisnik ne ostane zaglavljen
+                                        withContext(Dispatchers.Main) {
+                                            onComplete()
+                                        }
+                                    }
+                                }
+                            } else {
+                                android.util.Log.e("GATALINKA_ONBOARDING", ">>> isReady=FALSE, NE SPREMA PODATKE")
+                                android.util.Log.e("GATALINKA_ONBOARDING", ">>> isDateValid=$isDateValid, gender=${gender.name}")
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(
+                                color = GataUI.MysticPurpleMedium,
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                            .border(
+                                width = 3.dp,
+                                color = GataUI.MysticGold,
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isReady) "🔮" else "☕",
+                            fontSize = 32.sp
+                        )
+                    }
+                }
+                
+                // Tekst ispod gumba - bapski stil
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = if (isReady) "Zavirimo u šalicu" else "Popuni sve",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        color = GataUI.Beige.copy(alpha = if (isReady) 1f else 0.6f),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            // Prazan prostor za balans
+            Spacer(modifier = Modifier.size(48.dp))
         }
     }
 }

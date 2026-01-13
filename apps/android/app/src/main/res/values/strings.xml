@@ -20,5 +20,6 @@
     <string name="go_to_home">Idemo dalje</string>
     
     <!-- Google Sign In - Web Client ID -->
-    <string name="default_web_client_id" translatable="false">253930174034-0vqk1021d09n0rbnkgtjvhvthqd5tcnq.apps.googleusercontent.com</string>
+    <!-- VAŽNO: Ovo mora biti isti kao Web Client ID u Firebase Authentication → Sign-in method → Google → Web SDK configuration -->
+    <string name="default_web_client_id" translatable="false">253930174034-f9su74ckmll14gaqelpo9ng046lnvjpq.apps.googleusercontent.com</string>
 </resources>

@@ -1,0 +1,15 @@
+# Logcat Filter za Android Studio
+# Kopiraj ovaj tekst u Logcat filter polje
+
+# Filter za sve Google Sign-In i API logove:
+tag:LoginScreen | tag:GoogleSignInHelper | tag:AuthViewModel | tag:API_CALL | tag:FirebaseFunctionsService
+
+# ILI koristi text filter (ako tag filter ne radi):
+Google Sign-In | API_CALL | AuthViewModel | GoogleSignInHelper | LoginScreen
+
+# ILI samo za Google Sign-In:
+tag:LoginScreen | tag:GoogleSignInHelper | tag:AuthViewModel
+
+# ILI samo za API pozive:
+tag:API_CALL | tag:FirebaseFunctionsService
+

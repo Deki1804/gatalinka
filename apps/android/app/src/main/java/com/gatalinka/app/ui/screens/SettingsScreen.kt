@@ -19,9 +19,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavHostController
 import com.gatalinka.app.nav.Routes
 import com.gatalinka.app.vm.AuthViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,10 +31,14 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     navController: NavHostController,
+    preferencesRepo: com.gatalinka.app.data.UserPreferencesRepository? = null,
     viewModel: AuthViewModel = viewModel()
 ) {
     val authState by viewModel.authState.collectAsState()
     var showSignOutDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var isDeletingAccount by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -163,6 +169,40 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
                                     .clickable { showSignOutDialog = true }
+                            )
+                            
+                            HorizontalDivider(color = Color(0xFFEFE3D1).copy(alpha = 0.2f))
+                            
+                            // Delete Account Button
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        "Obriši račun",
+                                        color = Color(0xFFFF5252),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                },
+                                supportingContent = {
+                                    Text(
+                                        "Trajno obriši svoj račun i sve podatke",
+                                        color = Color(0xFFEFE3D1).copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF5252)
+                                    )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable(enabled = !isDeletingAccount) {
+                                        showDeleteAccountDialog = true
+                                    }
                             )
                         }
                     }
@@ -384,6 +424,85 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(
                     onClick = { showSignOutDialog = false }
+                ) {
+                    Text("Odustani", color = Color(0xFFEFE3D1))
+                }
+            },
+            containerColor = Color(0xFF2D1B4E),
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+    
+    // Delete Account Dialog
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingAccount) showDeleteAccountDialog = false },
+            title = {
+                Text(
+                    "Obriši račun?",
+                    color = Color(0xFFFF5252)
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Ova akcija je trajna i ne može se poništiti.",
+                        color = Color(0xFFEFE3D1),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Obrisat će se:\n" +
+                        "• Tvoj račun\n" +
+                        "• Sva čitanja\n" +
+                        "• Svi podaci",
+                        color = Color(0xFFEFE3D1).copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (isDeletingAccount) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color(0xFFFFD700)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (!isDeletingAccount) {
+                            isDeletingAccount = true
+                            scope.launch {
+                                // 1. Obriši lokalne podatke
+                                preferencesRepo?.clearAllUserData()
+                                
+                                // 2. Obriši Firebase račun i cloud podatke
+                                val result = viewModel.deleteAccount()
+                                isDeletingAccount = false
+                                showDeleteAccountDialog = false
+                                
+                                if (result.isSuccess) {
+                                    onSignOut()
+                                } else {
+                                    // Greška će biti prikazana kroz errorMessage u ViewModel-u
+                                    // Možeš dodati Toast ili Snackbar ako želiš
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isDeletingAccount
+                ) {
+                    Text(
+                        if (isDeletingAccount) "Brišem..." else "Obriši",
+                        color = Color(0xFFFF5252)
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteAccountDialog = false },
+                    enabled = !isDeletingAccount
                 ) {
                     Text("Odustani", color = Color(0xFFEFE3D1))
                 }

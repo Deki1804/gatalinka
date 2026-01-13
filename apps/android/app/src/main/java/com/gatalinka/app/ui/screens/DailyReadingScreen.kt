@@ -42,11 +42,22 @@ fun DailyReadingScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<GatalinkaReadingUiModel?>(null) }
     
-    // Učitaj dnevno čitanje
+    // Učitaj dnevno čitanje - prvo provjeri cache
     LaunchedEffect(Unit) {
         isLoading = true
         error = null
         try {
+            // Prvo provjeri cache
+            val cachedReading = preferencesRepo.getDailyReadingCache()
+            if (cachedReading != null) {
+                result = cachedReading
+                isLoading = false
+                // Ne učitavaj novi u pozadini - korisnik je eksplicitno otvorio ekran za dnevno čitanje
+                // Ako želi novi, može refreshati
+                return@LaunchedEffect
+            }
+            
+            // Nema cache, učitaj novi
             val userInput = preferencesRepo.userInput.first()
             val response = FirebaseFunctionsService.getDailyReading(userInput)
             
@@ -64,6 +75,8 @@ fun DailyReadingScreen(
             )
             
             result = uiModel
+            // Spremi u cache
+            preferencesRepo.saveDailyReadingCache(uiModel)
         } catch (e: Exception) {
             error = ErrorMessages.getErrorMessage(e)
         } finally {
@@ -133,6 +146,8 @@ fun DailyReadingScreen(
                                             )
                                             
                                             result = uiModel
+                                            // Spremi u cache
+                                            preferencesRepo.saveDailyReadingCache(uiModel)
                                         } catch (e: Exception) {
                                             error = ErrorMessages.getErrorMessage(e)
                                         } finally {

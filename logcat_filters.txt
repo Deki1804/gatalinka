@@ -1,0 +1,64 @@
+=== LOGCAT FILTERI ZA GATALINKA APP ===
+
+=== POSTAVLJANJE ADB (ako nije u PATH) ===
+PowerShell (za ovu sesiju):
+  $env:Path += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"
+
+Ili koristi puni put:
+  & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat ...
+
+Provjeri da li radi:
+  adb devices
+
+
+1. SVI GATALINKA DEBUG TAGOVI:
+   adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING GATALINKA_DATASTORE
+
+2. NAVIGACIJA I ONBOARDING:
+   adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING
+
+3. API POZIVI (Firebase Functions) - PREPORUČENO:
+   adb logcat -s API_CALL FirebaseFunctionsService
+
+4. SVE GATALINKA + FIREBASE:
+   adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING GATALINKA_DATASTORE API_CALL FirebaseFunctionsService
+
+5. SAMO ERROR I WARN ZA GATALINKA:
+   adb logcat *:E GATALINKA_*:W
+
+6. KOMBINOVANO - GATALINKA + SISTEM NAVIGACIJE:
+   adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING NavController
+
+7. SVE ZA PAKET com.gatalinka.app (grep):
+   adb logcat | Select-String "com.gatalinka.app"
+
+8. SAMO GATALINKA TAGOVI (grep):
+   adb logcat | Select-String "GATALINKA_|gatalinka"
+
+9. API POZIVI - DETALJNO (Firebase Functions + Network):
+   adb logcat -s API_CALL FirebaseFunctionsService FirebaseFunctions FirebaseAuth OkHttp Retrofit
+
+10. ONBOARDING FLOW - KOMPLETNO:
+    adb logcat -s GATALINKA_ONBOARDING GATALINKA_DATASTORE GATALINKA_NAV
+
+11. NAVIGACIJA - SVE (GATALINKA + Android Navigation):
+    adb logcat -s GATALINKA_NAV NavController Navigation
+
+12. DATASTORE OPERACIJE:
+    adb logcat -s GATALINKA_DATASTORE
+
+=== KORISNO ===
+- Za praćenje u realnom vremenu, koristi bilo koji od gore navedenih filtera.
+- Za spremanje u fajl, dodaj '> logcat.txt' na kraju komande (PowerShell: '| Out-File logcat.txt').
+- Za čišćenje logova prije pokretanja: adb logcat -c
+- Za kombinaciju (clear + filter): adb logcat -c; adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING
+
+=== PREPORUČENI FILTER ZA DEBUG ONBOARDING NAVIGACIJE ===
+adb logcat -c; adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING GATALINKA_DATASTORE DateValidators
+
+=== PREPORUČENI FILTER ZA API POZIVE ===
+adb logcat -s API_CALL FirebaseFunctionsService
+
+=== PREPORUČENI FILTER ZA SVE (NAVIGACIJA + ONBOARDING + API) ===
+adb logcat -s GATALINKA_NAV GATALINKA_ONBOARDING GATALINKA_DATASTORE API_CALL FirebaseFunctionsService DateValidators
+

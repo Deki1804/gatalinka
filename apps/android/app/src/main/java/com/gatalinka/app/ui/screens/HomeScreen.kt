@@ -53,43 +53,41 @@ fun HomeScreen(
     var isLoadingDaily by remember { mutableStateOf(false) }
     
     // Load daily reading if authenticated - s cache support
-    LaunchedEffect(isAuthenticated, preferencesRepo) {
-        if (isAuthenticated && preferencesRepo != null) {
+    // VAŽNO: Ne učitavaj automatski - samo kada korisnik eksplicitno zahtijeva
+    // Ovo sprječava nepotrebne API pozive prije nego što korisnik uopće vidi ekran
+    // Koristi userId kao key da se pokreće samo jednom po korisniku
+    val userId = if (authState is com.gatalinka.app.vm.AuthState.Authenticated) {
+        (authState as com.gatalinka.app.vm.AuthState.Authenticated).userId
+    } else null
+    
+    // Guard da se ne triggera više puta - koristi remember s userId key-om
+    val hasLoadedForUser = remember(userId) { mutableStateOf(false) }
+    
+    LaunchedEffect(userId, preferencesRepo) {
+        // Pokreni samo ako je korisnik prijavljen i preferencesRepo je dostupan
+        // I ako nije već učitan za ovog korisnika
+        if (userId != null && preferencesRepo != null && !hasLoadedForUser.value && !isLoadingDaily) {
+            hasLoadedForUser.value = true
             isLoadingDaily = true
             try {
-                // Prvo provjeri cache
+                if (com.gatalinka.app.BuildConfig.DEBUG) {
+                    android.util.Log.d("HomeScreen", "🔍 LaunchedEffect: Starting daily reading load for userId=$userId")
+                }
+                // Prvo provjeri cache - ako postoji za današnji dan, koristi ga
                 val cachedReading = preferencesRepo.getDailyReadingCache()
                 if (cachedReading != null) {
                     dailyReading = cachedReading
                     isLoadingDaily = false
-                    // Učitaj novi u pozadini za sutra
-                    scope.launch {
-                        try {
-                            val userInput = preferencesRepo.userInput.first()
-                            val response = com.gatalinka.app.api.FirebaseFunctionsService.getDailyReading(userInput)
-                            val newReading = com.gatalinka.app.ui.model.GatalinkaReadingUiModel(
-                                mainText = response.mainText,
-                                love = response.love,
-                                work = response.work,
-                                money = response.money,
-                                health = response.health,
-                                symbols = response.symbols,
-                                luckyNumbers = response.luckyNumbers,
-                                luckScore = response.luckScore,
-                                mantra = response.mantra,
-                                energyScore = response.energyScore
-                            )
-                            dailyReading = newReading
-                            preferencesRepo.saveDailyReadingCache(newReading)
-                        } catch (e: Exception) {
-                            // Silent fail - daily reading is optional
-                            if (com.gatalinka.app.BuildConfig.DEBUG) {
-                                android.util.Log.w("HomeScreen", "Failed to refresh daily reading", e)
-                            }
-                        }
+                    // NE učitavaj novi u pozadini - cache je validan za cijeli dan
+                    // Background refresh će se desiti sutra kada cache expirira
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("HomeScreen", "✅ Using cached daily reading for today")
                     }
                 } else {
-                    // Nema cache, učitaj novi
+                    // Nema cache ili cache je stariji od današnjeg dana, učitaj novi
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("HomeScreen", "📤 No valid cache, loading new daily reading (1 API call)")
+                    }
                     val userInput = preferencesRepo.userInput.first()
                     val response = com.gatalinka.app.api.FirebaseFunctionsService.getDailyReading(userInput)
                     val newReading = com.gatalinka.app.ui.model.GatalinkaReadingUiModel(
@@ -106,12 +104,17 @@ fun HomeScreen(
                     )
                     dailyReading = newReading
                     preferencesRepo.saveDailyReadingCache(newReading)
+                    if (com.gatalinka.app.BuildConfig.DEBUG) {
+                        android.util.Log.d("HomeScreen", "✅ Daily reading loaded and cached (1 API call total)")
+                    }
                 }
             } catch (e: Exception) {
                 // Silent fail - daily reading is optional
                 if (com.gatalinka.app.BuildConfig.DEBUG) {
-                    android.util.Log.w("HomeScreen", "Failed to load daily reading", e)
+                    android.util.Log.w("HomeScreen", "❌ Failed to load daily reading", e)
                 }
+                // Reset flag ako je došlo do greške, da se može pokušati ponovo
+                hasLoadedForUser.value = false
             } finally {
                 isLoadingDaily = false
             }
@@ -211,8 +214,15 @@ fun HomeScreen(
                                                 textAlpha.animateTo(1f, animationSpec = tween(800))
                                             }
                                             
+                                            // Filtriraj "U tvojoj šalici se vidi" iz daily reading teksta
+                                            val filteredText = dailyReading!!.mainText
+                                                .replace(Regex("(?i)u tvojoj šalici se vidi"), "Danas te prate simboli")
+                                                .replace(Regex("(?i)u tvojoj šalici"), "Danas")
+                                                .replace(Regex("(?i)u šalici se vidi"), "Danas se vidi")
+                                                .replace(Regex("(?i)u šalici"), "Danas")
+                                            
                                             Text(
-                                                dailyReading!!.mainText.take(120) + if (dailyReading!!.mainText.length > 120) "..." else "",
+                                                filteredText.take(120) + if (filteredText.length > 120) "..." else "",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = Color(0xFFEFE3D1).copy(alpha = 0.9f),
                                                 maxLines = 2,

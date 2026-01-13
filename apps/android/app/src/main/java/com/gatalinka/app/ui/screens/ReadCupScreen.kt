@@ -59,11 +59,29 @@ fun ReadCupScreen(
     var result by remember { mutableStateOf<GatalinkaReadingUiModel?>(null) }
     
     // Pokreni čitanje jednom - osvježi kada se promijeni imageUri
-    // Koristi viewModelScope da se API poziv ne prekine ako kompozicija napusti
+    // VAŽNO: LaunchedEffect se pokreće samo kada se imageUri promijeni
+    // Ovo osigurava da se API pozove samo 1 put po slici
+    // Guard: zapamti za koji imageUri smo već učitali
+    val lastLoadedUri = remember { mutableStateOf<String?>(null) }
+    
     LaunchedEffect(imageUri) {
+        // Zaštita: provjeri da li već učitavamo za ovaj imageUri ili je već učitan
+        if (lastLoadedUri.value == imageUri && (isLoading || result != null)) {
+            if (com.gatalinka.app.BuildConfig.DEBUG) {
+                android.util.Log.d("ReadCupScreen", "⏭️ Already loading/loaded for this imageUri, skipping")
+            }
+            return@LaunchedEffect
+        }
+        
+        // Označi da počinjemo učitavanje za ovaj imageUri
+        lastLoadedUri.value = imageUri
         isLoading = true
         errorMessage = null
         result = null
+        
+        if (com.gatalinka.app.BuildConfig.DEBUG) {
+            android.util.Log.d("ReadCupScreen", "=== Starting API call for imageUri: $imageUri ===")
+        }
         
         try {
             val cleanImageUri = imageUri.split("?")[0]

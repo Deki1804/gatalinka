@@ -74,10 +74,13 @@ fun RegisterScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         coroutineScope.launch {
-            val idToken = GoogleSignInHelper.getSignInResult(result.data)
+            val (idToken, errorMessage) = GoogleSignInHelper.getSignInResult(result.data)
             
             if (idToken != null) {
                 viewModel.signInWithGoogleIdToken(idToken)
+            } else {
+                // Postavi error poruku ako je došlo do greške
+                viewModel.setError(errorMessage ?: "Google prijava nije uspjela. Pokušaj ponovo.")
             }
         }
     }

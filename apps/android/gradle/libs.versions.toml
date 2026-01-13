@@ -1,5 +1,5 @@
 [versions]
-agp = "8.13.0"
+agp = "8.13.2"
 kotlin = "2.0.21"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -20,6 +20,7 @@ okhttp = "4.12.0"
 gson = "2.10.1"
 firebase-bom = "33.0.0"
 google-services = "4.4.2"
+firebase-crashlytics = "3.0.2"
 firestore = "24.11.0"
 firebase-functions = "20.5.0"
 firebase-storage = "20.3.1"
@@ -66,4 +67,5 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics" }
 

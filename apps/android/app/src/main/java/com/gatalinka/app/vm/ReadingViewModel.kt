@@ -101,8 +101,44 @@ class ReadingViewModel : ViewModel() {
     
     
     private fun mapDtoToUiModel(dto: GatalinkaReadingDto): GatalinkaReadingUiModel {
+        // Fallback za stara čitanja: ako nema visibleSymbols, generiraj iz symbols arraya
+        val visibleSymbols = if (!dto.visibleSymbols.isNullOrEmpty()) {
+            dto.visibleSymbols.map { 
+                com.gatalinka.app.ui.model.VisibleSymbol(
+                    symbol = it.symbol,
+                    meaning = it.meaning
+                )
+            }
+        } else if (!dto.symbols.isNullOrEmpty()) {
+            // Generiraj generičko značenje za stare simbole
+            dto.symbols.take(5).map { symbol ->
+                com.gatalinka.app.ui.model.VisibleSymbol(
+                    symbol = symbol,
+                    meaning = generateGenericMeaning(symbol)
+                )
+            }
+        } else {
+            null
+        }
+        
+        // Fallback za interpretation
+        val interpretation = dto.interpretation?.takeIf { it.isNotBlank() }
+            ?: if (dto.mainText.isNotBlank()) {
+                // Koristi mainText kao fallback, ali dodaj poruku za stara čitanja
+                null // Ne prikazuj "Tumačenje nije dostupno" - jednostavno sakrij sekciju
+            } else {
+                null
+            }
+        
+        // Fallback za advice
+        val advice = dto.advice?.takeIf { it.isNotBlank() }
+            ?: generateDefaultAdvice()
+        
         return GatalinkaReadingUiModel(
             mainText = dto.mainText,
+            visibleSymbols = visibleSymbols,
+            interpretation = interpretation,
+            advice = advice,
             love = dto.love,
             work = dto.work,
             money = dto.money,
@@ -111,8 +147,38 @@ class ReadingViewModel : ViewModel() {
             luckyNumbers = dto.luckyNumbers,
             luckScore = dto.luckScore,
             mantra = dto.mantra,
-            energyScore = dto.energyScore
+            energyScore = dto.energyScore,
+            horoscopeMatch = dto.horoscopeMatch?.takeIf { it.isNotBlank() }
         )
+    }
+    
+    private fun generateGenericMeaning(symbol: String): String {
+        // Generičko značenje za stare simbole (fallback)
+        return when {
+            symbol.contains("ptica", ignoreCase = true) -> "Vijesti dolaze"
+            symbol.contains("konj", ignoreCase = true) -> "Put i napredak"
+            symbol.contains("pas", ignoreCase = true) -> "Prijatelj i vjernost"
+            symbol.contains("mačka", ignoreCase = true) -> "Ljubomora ili oprez"
+            symbol.contains("zmija", ignoreCase = true) -> "Ogovaranje ili izdaja"
+            symbol.contains("riba", ignoreCase = true) -> "Novac ili dobitak"
+            symbol.contains("put", ignoreCase = true) -> "Putovanje ili promjena"
+            symbol.contains("kuća", ignoreCase = true) -> "Dom i obitelj"
+            symbol.contains("krug", ignoreCase = true) -> "Brak ili zatvaranje kruga"
+            symbol.contains("križ", ignoreCase = true) -> "Teret ili teškoća"
+            symbol.contains("broj", ignoreCase = true) || symbol.any { it.isDigit() } -> "Vrijeme i važnost"
+            else -> "Simbol u šalici"
+        }
+    }
+    
+    private fun generateDefaultAdvice(): String {
+        val advices = listOf(
+            "Ne brzaj, sve dolazi u svoje vrijeme.",
+            "Pazi kome govoriš svoje planove.",
+            "Vjeruj u sebe, ali i pazi na znakove.",
+            "Dobro razmisli prije nego što doneseš važnu odluku.",
+            "Ne zaboravi na one koji su ti uvijek bili uz tebe."
+        )
+        return advices.random()
     }
     
     private fun mapReasonToMessage(reason: String): String {

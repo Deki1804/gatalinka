@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
@@ -43,6 +45,128 @@ import com.gatalinka.app.ui.components.MysticOrb
 import com.gatalinka.app.util.ErrorMessages
 import com.gatalinka.app.ui.design.GataUI
 
+/**
+ * Generira tekst format direktno iz simbola.
+ * Za čitanje iz šalice: "U tvojoj šalici se vidi [simbol1], [simbol2] i [simbol3]..."
+ * Za daily reading: "Danas te prate simboli: [simbol1], [simbol2] i [simbol3]..."
+ */
+private fun generateWhatSeenInCupFromSymbols(
+    symbols: List<com.gatalinka.app.ui.model.VisibleSymbol>?,
+    isDailyReading: Boolean = false
+): String? {
+    if (symbols.isNullOrEmpty()) return null
+    
+    val symbolNames = symbols.map { it.symbol }
+    
+    // Prvi dio: različito za daily reading vs čitanje iz šalice
+    val firstPart = if (isDailyReading) {
+        // Daily reading: "Danas te prate simboli: X, Y i Z."
+        when (symbolNames.size) {
+            1 -> "Danas te prate simboli: ${symbolNames.first()}."
+            2 -> "Danas te prate simboli: ${symbolNames[0]} i ${symbolNames[1]}."
+            else -> {
+                val last = symbolNames.last()
+                val others = symbolNames.dropLast(1).joinToString(", ")
+                "Danas te prate simboli: $others i $last."
+            }
+        }
+    } else {
+        // Čitanje iz šalice: "U tvojoj šalici se vidi X, Y i Z."
+        when (symbolNames.size) {
+            1 -> "U tvojoj šalici se vidi ${symbolNames.first()}."
+            2 -> "U tvojoj šalici se vidi ${symbolNames[0]} i ${symbolNames[1]}."
+            else -> {
+                val last = symbolNames.last()
+                val others = symbolNames.dropLast(1).joinToString(", ")
+                "U tvojoj šalici se vidi $others i $last."
+            }
+        }
+    }
+    
+    // Drugi dio: kratka značenja simbola (bapski stil, direktno)
+    val meanings = symbols.mapNotNull { symbol ->
+        val meaning = symbol.meaning.takeIf { 
+            it.isNotBlank() && 
+            it != "Simbol u šalici" &&
+            it.length < 50 && // Kratka značenja
+            !it.contains("horoskop", ignoreCase = true) &&
+            !it.contains("energija", ignoreCase = true) &&
+            !it.contains("more", ignoreCase = true) &&
+            !it.contains("oblak", ignoreCase = true) &&
+            !it.contains("vatra", ignoreCase = true)
+        } ?: return@mapNotNull null
+        
+        // Formatiraj u bapski stil: "Ključ pokazuje rješenje ili izlaz."
+        when {
+            meaning.startsWith(symbol.symbol, ignoreCase = true) -> meaning
+            meaning.length < 25 -> "${symbol.symbol} znači $meaning."
+            else -> "${symbol.symbol} pokazuje $meaning."
+        }
+    }
+    
+    return if (meanings.isNotEmpty()) {
+        "$firstPart ${meanings.joinToString(" ")}"
+    } else {
+        firstPart
+    }
+}
+
+/**
+ * Filtrira horoskopski jezik iz teksta.
+ */
+private fun filterHoroscopeLanguage(text: String): String {
+    var filtered = text
+    // Ukloni reference na horoskop znakove
+    val zodiacSigns = listOf("Ovan", "Lav", "Blizanci", "Rak", "Vaga", "Škorpion", 
+        "Strijelac", "Jarac", "Vodenjak", "Ribe", "Bik", "horoskop", "zodijak")
+    zodiacSigns.forEach { sign ->
+        filtered = filtered.replace(sign, "", ignoreCase = true)
+    }
+    // Ukloni generičke astro fraze
+    val astroPhrases = listOf(
+        "energija dana", "unutarnja vatra", "univerzalna energija",
+        "kozmička energija", "astro energija", "energija zodiaka"
+    )
+    astroPhrases.forEach { phrase ->
+        filtered = filtered.replace(phrase, "", ignoreCase = true)
+    }
+    // Očisti višestruke razmake
+    filtered = filtered.replace(Regex("\\s+"), " ").trim()
+    return filtered
+}
+
+/**
+ * Generira horoskopsku potvrdu koja se referira na simbole iz šalice.
+ * Primjer: "Kao Ovan, poznat si po hrabrosti. Ono što se vidi u šalici slaže se s tim — ali ovoga puta bolje je stati i razmisliti."
+ */
+private fun generateHoroscopeConfirmation(
+    zodiacSign: com.gatalinka.app.util.ZodiacSign?,
+    symbols: List<com.gatalinka.app.ui.model.VisibleSymbol>?
+): String? {
+    if (zodiacSign == null || symbols.isNullOrEmpty()) return null
+    
+    val zodiacName = zodiacSign.displayName
+    val symbolNames = symbols.take(3).map { it.symbol }.joinToString(", ")
+    
+    // Karakteristike znakova (kratko, bapski stil)
+    val zodiacTraits = when (zodiacSign) {
+        com.gatalinka.app.util.ZodiacSign.Aries -> "hrabrosti i brzini odluka"
+        com.gatalinka.app.util.ZodiacSign.Taurus -> "upornosti i strpljivosti"
+        com.gatalinka.app.util.ZodiacSign.Gemini -> "komunikaciji i promjenama"
+        com.gatalinka.app.util.ZodiacSign.Cancer -> "osjećajnosti i domoljublju"
+        com.gatalinka.app.util.ZodiacSign.Leo -> "samopouzdanju i velikodušnosti"
+        com.gatalinka.app.util.ZodiacSign.Virgo -> "pažnji na detalje i praktičnosti"
+        com.gatalinka.app.util.ZodiacSign.Libra -> "ravnoteži i diplomaciji"
+        com.gatalinka.app.util.ZodiacSign.Scorpio -> "intenzitetu i dubini"
+        com.gatalinka.app.util.ZodiacSign.Sagittarius -> "slobodi i avanturi"
+        com.gatalinka.app.util.ZodiacSign.Capricorn -> "ambiciji i odgovornosti"
+        com.gatalinka.app.util.ZodiacSign.Aquarius -> "nezavisnosti i inovativnosti"
+        com.gatalinka.app.util.ZodiacSign.Pisces -> "intuiciji i osjećajnosti"
+    }
+    
+    return "Kao $zodiacName, poznat si po $zodiacTraits. Ono što se vidi u šalici ($symbolNames) slaže se s tim — ali ovoga puta bolje je stati i razmisliti prije nego kreneš."
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingResultScreen(
@@ -50,12 +174,19 @@ fun ReadingResultScreen(
     imageUri: String,
     onBack: () -> Unit,
     onSave: () -> Unit,
-    targetName: String? = null // Ime osobe za koju je gatanje (null = za sebe)
+    targetName: String? = null, // Ime osobe za koju je gatanje (null = za sebe)
+    preferencesRepo: com.gatalinka.app.data.UserPreferencesRepository? = null, // Opcionalno za horoskop potvrdu
+    onRetryFromGallery: (() -> Unit)? = null // Callback za retry iz galerije
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
     val readingsRepo = remember { com.gatalinka.app.data.CloudReadingsRepository() }
+    
+    // Dohvati zodiac sign za horoskop potvrdu
+    val userInput by preferencesRepo?.userInput?.collectAsState(initial = com.gatalinka.app.data.UserInput()) 
+        ?: remember { mutableStateOf(com.gatalinka.app.data.UserInput()) }
+    val zodiacSign = remember(userInput) { userInput.zodiacSign }
     
     var isSaving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
@@ -63,40 +194,67 @@ fun ReadingResultScreen(
     // Presretni sistem back button i pozovi naš onBack callback
     BackHandler(onBack = onBack)
     
-    // Share functionality
+    // Share functionality - viralno formatiranje za WhatsApp/Viber
     fun buildShareText(result: com.gatalinka.app.ui.model.GatalinkaReadingUiModel): String {
         val sb = StringBuilder()
-        sb.append("☕ Moje čitanje iz šalice kave - Gatalinka\n\n")
-        sb.append("✨ Sreća: ${result.luckScore}/100\n")
-        sb.append("⚡ Energija: ${result.energyScore}/100\n\n")
+        sb.append("GATALINKA ☕🔮\n")
+        sb.append("Moje čitanje iz šalice kave\n\n")
         
-        if (result.mantra.isNotEmpty()) {
-            sb.append("💫 ${result.mantra}\n\n")
+        // Visible symbols with meanings (BAPSKI STIL) - najvažnije prvo
+        if (!result.visibleSymbols.isNullOrEmpty()) {
+            sb.append("U šalici se vidi:\n")
+            result.visibleSymbols.take(5).forEach { symbol ->
+                sb.append("• ${symbol.symbol} — ${symbol.meaning}\n")
+            }
+            sb.append("\n")
+        } else if (result.symbols.isNotEmpty()) {
+            sb.append("U šalici se vidi:\n")
+            result.symbols.take(5).forEach { symbol ->
+                sb.append("• $symbol\n")
+            }
+            sb.append("\n")
         }
         
-        sb.append("📖 ${result.mainText}\n\n")
+        // Interpretation - kako se to tumači
+        if (!result.interpretation.isNullOrEmpty()) {
+            sb.append("Tumačenje:\n")
+            sb.append("${result.interpretation}\n\n")
+        } else if (result.mainText.isNotEmpty()) {
+            sb.append("Tumačenje:\n")
+            sb.append("${result.mainText}\n\n")
+        }
         
+        // Advice - kratki savjet
+        if (!result.advice.isNullOrEmpty()) {
+            sb.append("Savjet:\n")
+            sb.append("${result.advice}\n\n")
+        }
+        
+        // Kategorije (kratko)
         if (result.love?.isNotEmpty() == true) {
-            sb.append("💕 Ljubav: ${result.love}\n\n")
+            sb.append("💕 ${result.love}\n")
         }
         if (result.work?.isNotEmpty() == true) {
-            sb.append("💼 Posao: ${result.work}\n\n")
+            sb.append("💼 ${result.work}\n")
         }
         if (result.money?.isNotEmpty() == true) {
-            sb.append("💰 Novac: ${result.money}\n\n")
+            sb.append("💰 ${result.money}\n")
         }
         if (result.health?.isNotEmpty() == true) {
-            sb.append("🌿 Zdravlje: ${result.health}\n\n")
+            sb.append("🌿 ${result.health}\n")
         }
         
-        if (result.symbols.isNotEmpty()) {
-            sb.append("🔮 Simboli: ${result.symbols.joinToString(", ")}\n\n")
+        if (result.love?.isNotEmpty() == true || result.work?.isNotEmpty() == true || 
+            result.money?.isNotEmpty() == true || result.health?.isNotEmpty() == true) {
+            sb.append("\n")
         }
         
+        // Sretni brojevi
         if (result.luckyNumbers.isNotEmpty()) {
             sb.append("🎲 Sretni brojevi: ${result.luckyNumbers.joinToString(", ")}\n\n")
         }
         
+        // Footer
         sb.append("Preuzmi Gatalinka app i otkrij svoju sudbinu! 🔮")
         return sb.toString()
     }
@@ -246,8 +404,17 @@ fun ReadingResultScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Mantra Card
-                if (result.mantra.isNotEmpty()) {
+                // BAPSKI REDOSLIJED:
+                // 1. Prepoznati simboli (izvor svega)
+                // 2. Što se vidi u šalici (direktno iz simbola)
+                // 3. Kako baba to tumači (interpretation)
+                // 4. Savjet iz šalice (advice)
+
+                // Provjeri da li je daily reading (nema slike) - definirati prije korištenja
+                val isDailyReading = imageUri == "daily_reading_placeholder"
+
+                // 1. PREPOZNATI SIMBOLI / SIMBOLI DANA - IZVOR SVEGA
+                if (!result.visibleSymbols.isNullOrEmpty()) {
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
@@ -256,30 +423,227 @@ fun ReadingResultScreen(
                                     animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
                                 )
                     ) {
-                        MantraCard(result.mantra)
+                        VisibleSymbolsCard(result.visibleSymbols, isDailyReading)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // Main Reading Text
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
-                            slideInVertically(
-                                initialOffsetY = { 30 },
-                                animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
-                            )
-                ) {
-                    ReadingCard(
-                        title = "Priča iz šalice",
-                        content = result.mainText
-                    )
+                // 2. "ŠTO SE VIDI U ŠALICI" ili "PORUKA DANA" - DIREKTNO IZ SIMBOLA (konkretno, bez poezije)
+                // Za daily reading, filtriraj "U tvojoj šalici" iz teksta
+                val mainTextForDaily = if (isDailyReading && result.mainText.isNotBlank()) {
+                    result.mainText
+                        .replace(Regex("(?i)u tvojoj šalici se vidi"), "Danas te prate simboli:")
+                        .replace(Regex("(?i)u šalici se vidi"), "Danas te prate simboli:")
+                        .replace(Regex("(?i)u šalici"), "Danas")
+                        .replace(Regex("(?i)šalici"), "danas")
+                        .replace(Regex("(?i)talog"), "energija")
+                        .replace(Regex("(?i)na dnu"), "danas")
+                        .replace(Regex("(?i)uz rub"), "danas")
+                        .replace(Regex("(?i)u sredini"), "danas")
+                } else {
+                    result.mainText
+                }
+                
+                val whatSeenInCup = generateWhatSeenInCupFromSymbols(result.visibleSymbols, isDailyReading)
+                    ?: result.interpretation?.takeIf { it.isNotBlank() }
+                        ?.let { filterHoroscopeLanguage(it) }
+                    ?: mainTextForDaily.takeIf { it.isNotBlank() }
+                        ?.let { filterHoroscopeLanguage(it) }
+                
+                if (!whatSeenInCup.isNullOrBlank()) {
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
+                                slideInVertically(
+                                    initialOffsetY = { 30 },
+                                    animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
+                                )
+                    ) {
+                        ReadingCard(
+                            title = if (isDailyReading) "Poruka dana" else "Što se vidi u šalici",
+                            content = whatSeenInCup
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // 3. "KAKO BABA TO TUMAČI" - interpretation (MORA referencirati simbole)
+                val babaInterpretation = result.interpretation?.takeIf { it.isNotBlank() }
+                    ?.let { filterHoroscopeLanguage(it) }
+                    ?.takeIf { 
+                        // Provjeri da nije isti kao "Što se vidi"
+                        it != whatSeenInCup && 
+                        it.length > 30 && // Minimalna duljina
+                        // Provjeri da referencira simbole (ako postoje)
+                        (result.visibleSymbols.isNullOrEmpty() || 
+                         result.visibleSymbols.any { symbol -> 
+                             it.contains(symbol.symbol, ignoreCase = true) 
+                         })
+                    }
+                
+                if (!babaInterpretation.isNullOrBlank()) {
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
+                                slideInVertically(
+                                    initialOffsetY = { 30 },
+                                    animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
+                                )
+                    ) {
+                        ReadingCard(
+                            title = "Kako baba to tumači",
+                            content = babaInterpretation
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
-                // Categories with animations
-                if (result.love?.isNotEmpty() == true) {
+                // 4. "SAVJET IZ ŠALICE" - advice (1-2 rečenice max, bapski stil)
+                val babaAdvice = result.advice?.takeIf { it.isNotBlank() }
+                    ?.let { filterHoroscopeLanguage(it) }
+                    ?.takeIf { 
+                        // Provjeri da nije isti kao druge sekcije
+                        it != whatSeenInCup && 
+                        it != babaInterpretation &&
+                        it.length < 200 // Maksimalno 1-2 rečenice
+                    }
+                
+                // Provjeri da li je reading neuspješan (nema simbola ili je error poruka)
+                val isFailedReading = result.visibleSymbols.isNullOrEmpty() && 
+                    (whatSeenInCup?.contains("Talog se još skriva", ignoreCase = true) == true ||
+                     whatSeenInCup?.contains("Ne vidim", ignoreCase = true) == true ||
+                     whatSeenInCup?.contains("Ovo nije", ignoreCase = true) == true)
+                
+                if (!babaAdvice.isNullOrBlank()) {
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
+                                slideInVertically(
+                                    initialOffsetY = { 30 },
+                                    animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
+                                )
+                    ) {
+                        ReadingCard(
+                            title = if (isDailyReading) "Savjet dana" else "Savjet iz šalice",
+                            content = babaAdvice
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                // CTA gumbe za neuspješan reading
+                if (isFailedReading) {
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
+                                slideInVertically(
+                                    initialOffsetY = { 30 },
+                                    animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
+                                )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Primary: Slikaj opet
+                            Button(
+                                onClick = {
+                                    onBack() // Vrati na CupEditorScreen
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GataUI.MysticGold,
+                                    contentColor = GataUI.MysticPurpleDeep
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text(
+                                    "📷 Slikaj opet",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            // Secondary: Iz galerije
+                            OutlinedButton(
+                                onClick = {
+                                    // Ako postoji callback za retry iz galerije, koristi ga
+                                    // Inače samo vrati se nazad
+                                    if (onRetryFromGallery != null) {
+                                        onRetryFromGallery()
+                                    } else {
+                                        onBack()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = GataUI.MysticGold
+                                ),
+                                border = BorderStroke(2.dp, GataUI.MysticGold),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text(
+                                    "🖼️ Iz galerije",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Categories with animations - prikaži samo ako AI eksplicitno vrati BAPSKI stil
+                // Sakrij sekcije koje sadrže horoskop/zodiac reference ili generičke astro fraze
+                fun isBapskiContent(text: String?): Boolean {
+                    if (text.isNullOrBlank()) return false
+                    val filtered = filterHoroscopeLanguage(text)
+                    if (filtered.length < 30) return false // Minimalna duljina
+                    
+                    val lowerText = filtered.lowercase()
+                    // Provjeri da nije generički horoskop tekst
+                    val hasHoroscopeKeywords = listOf(
+                        "horoskop", "ovan", "lav", "blizanci", "rak", "vaga",
+                        "škorpion", "strijelac", "jarac", "vodenjak", "ribe", "bik",
+                        "energija dana", "unutarnja vatra", "kozmička", "astro"
+                    ).any { lowerText.contains(it, ignoreCase = true) }
+                    
+                    if (hasHoroscopeKeywords) return false
+                    
+                    // Provjeri da je bapski stil - trebao bi spominjati simbole ili biti konkretan
+                    val hasBapskiKeywords = listOf(
+                        "u šalici", "vidi se", "pokazuje", "govori o", "znači",
+                        "put", "srce", "knjiga", "cesta", "ptica", "sunce"
+                    ).any { lowerText.contains(it, ignoreCase = true) }
+                    
+                    // Ako nema bapskih ključnih riječi, možda je još uvijek generički
+                    // Ali ako je dovoljno dugačak i nema horoskop ključnih riječi, prikaži
+                    return filtered.length > 50 || hasBapskiKeywords
+                }
+                
+                // Helper funkcija za filtriranje "U šalici" iz teksta za daily reading
+                fun filterCupReferences(text: String): String {
+                    if (!isDailyReading) return text
+                    return text
+                        .replace(Regex("(?i)u ljubavi se vidi"), "Danas u ljubavi")
+                        .replace(Regex("(?i)na poslu se vidi"), "Na poslu danas")
+                        .replace(Regex("(?i)uz novac ide"), "S financijama danas")
+                        .replace(Regex("(?i)za zdravlje stoji"), "Za zdravlje danas")
+                        .replace(Regex("(?i)u šalici"), "danas")
+                        .replace(Regex("(?i)šalici"), "danas")
+                        .replace(Regex("(?i)talog"), "energija")
+                        .replace(Regex("(?i)na dnu"), "danas")
+                        .replace(Regex("(?i)uz rub"), "danas")
+                        .replace(Regex("(?i)u sredini"), "danas")
+                }
+                
+                if (isBapskiContent(result.love)) {
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
@@ -290,12 +654,12 @@ fun ReadingResultScreen(
                     ) {
                         ReadingCard(
                             title = "💕 Ljubav",
-                            content = result.love
+                            content = filterCupReferences(filterHoroscopeLanguage(result.love!!))
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-                if (result.work?.isNotEmpty() == true) {
+                if (isBapskiContent(result.work)) {
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
@@ -306,12 +670,12 @@ fun ReadingResultScreen(
                     ) {
                         ReadingCard(
                             title = "💼 Posao",
-                            content = result.work
+                            content = filterCupReferences(filterHoroscopeLanguage(result.work!!))
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-                if (result.money?.isNotEmpty() == true) {
+                if (isBapskiContent(result.money)) {
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
@@ -322,12 +686,12 @@ fun ReadingResultScreen(
                     ) {
                         ReadingCard(
                             title = "💰 Novac",
-                            content = result.money
+                            content = filterCupReferences(filterHoroscopeLanguage(result.money!!))
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-                if (result.health?.isNotEmpty() == true) {
+                if (isBapskiContent(result.health)) {
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
@@ -338,7 +702,7 @@ fun ReadingResultScreen(
                     ) {
                         ReadingCard(
                             title = "🌿 Zdravlje",
-                            content = result.health
+                            content = filterCupReferences(filterHoroscopeLanguage(result.health!!))
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
@@ -371,6 +735,31 @@ fun ReadingResultScreen(
                     ) {
                         LuckyNumbersCard(result.luckyNumbers)
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // ⭐ HOROSKOPSKA POTVRDA (SEKUNDARNO - NA KRAJU, KAO POTVRDA)
+                // Horoskop dolazi TEK NA KRAJU, kao potvrda onoga što je već viđeno u šalici
+                // Koristi horoscopeMatch iz backend-a (ako postoji), inače fallback na generateHoroscopeConfirmation
+                val horoscopeConfirmation = result.horoscopeMatch?.takeIf { it.isNotBlank() }
+                    ?: zodiacSign?.let { 
+                        generateHoroscopeConfirmation(it, result.visibleSymbols) 
+                    }
+                
+                if (!horoscopeConfirmation.isNullOrBlank()) {
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex++))) +
+                                slideInVertically(
+                                    initialOffsetY = { 30 },
+                                    animationSpec = tween(durationMillis = 600, delayMillis = getCardDelay(cardIndex - 1))
+                                )
+                    ) {
+                        ReadingCard(
+                            title = "⭐ I zvijezde se slažu",
+                            content = horoscopeConfirmation
+                        )
+                    }
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
@@ -387,7 +776,12 @@ fun ReadingResultScreen(
                 Button(
                     onClick = {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                        val currentImageUri = imageUri.split("?")[0]
+                        // Provjeri da li je placeholder (daily reading nema sliku)
+                        val currentImageUri = if (imageUri == "daily_reading_placeholder" || imageUri.isEmpty()) {
+                            "" // Prazan string za daily reading
+                        } else {
+                            imageUri.split("?")[0] // Ukloni query parametre ako postoje
+                        }
                         coroutineScope.launch {
                             isSaving = true
                             saveError = null
@@ -484,10 +878,10 @@ fun GlassmorphismCard(
 fun LuckScoreCard(score: Int) {
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
+        initialValue = 0.6f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
+            animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glow"
@@ -502,16 +896,16 @@ fun LuckScoreCard(score: Int) {
                 "Sreća",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1A0B2E)
+                color = Color(0xFFFFD700) // Zlatna boja kao EnergyScoreCard
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "$score/100",
-                style = MaterialTheme.typography.displayLarge.copy(
-                    fontSize = 56.sp,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontSize = 48.sp, // Ista veličina kao EnergyScoreCard
                     fontWeight = FontWeight.Bold
                 ),
-                color = Color(0xFF1A0B2E)
+                color = Color(0xFFFFD700) // Zlatna boja kao EnergyScoreCard
             )
             Spacer(modifier = Modifier.height(16.dp))
             LinearProgressIndicator(
@@ -520,8 +914,8 @@ fun LuckScoreCard(score: Int) {
                     .fillMaxWidth()
                     .height(12.dp)
                     .clip(RoundedCornerShape(6.dp)),
-                color = Color(0xFF1A0B2E),
-                trackColor = Color(0xFF1A0B2E).copy(alpha = 0.3f)
+                color = Color(0xFFFFD700), // Zlatna boja kao EnergyScoreCard
+                trackColor = Color(0xFFFFD700).copy(alpha = 0.3f) // Ista track boja kao EnergyScoreCard
             )
         }
     }
@@ -547,6 +941,98 @@ fun ReadingCard(title: String, content: String) {
                 lineHeight = 24.sp,
                 textAlign = TextAlign.Justify
             )
+        }
+    }
+}
+
+@Composable
+fun VisibleSymbolsCard(
+    symbols: List<com.gatalinka.app.ui.model.VisibleSymbol>,
+    isDailyReading: Boolean = false
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val maxVisible = 7
+    val shouldShowExpand = symbols.size > maxVisible
+    val visibleSymbols = if (isExpanded) symbols else symbols.take(maxVisible)
+    
+    GlassmorphismCard {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                if (isDailyReading) "🔮 Simboli dana" else "🔮 Prepoznati simboli",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFD700),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            // Lista simbola s značenjem
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                visibleSymbols.forEach { visibleSymbol ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFD700).copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFFFFD700).copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            ) {
+                                Text(
+                                    "✦",
+                                    color = Color(0xFFFFD700),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                                Text(
+                                    visibleSymbol.symbol,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color(0xFFFFD700),
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                            if (visibleSymbol.meaning.isNotEmpty()) {
+                                Text(
+                                    visibleSymbol.meaning,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFEFE3D1).copy(alpha = 0.9f),
+                                    lineHeight = 20.sp,
+                                    maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // "Prikaži još" / "Prikaži manje" button
+                if (shouldShowExpand) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (isExpanded) "Prikaži manje" else "Prikaži još (${symbols.size - maxVisible})",
+                            color = Color(0xFFFFD700),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -598,6 +1084,40 @@ fun SymbolsCard(symbols: List<String>) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AdviceCard(advice: String) {
+    GlassmorphismCard {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Text(
+                    "💡",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(
+                    "Savjet",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFD700)
+                )
+            }
+            Text(
+                advice,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFFEFE3D1),
+                lineHeight = 24.sp,
+                textAlign = TextAlign.Justify,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
