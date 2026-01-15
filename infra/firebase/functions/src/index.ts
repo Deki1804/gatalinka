@@ -1,4 +1,4 @@
-﻿import * as admin from "firebase-admin";
+import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { readCup } from "./readCup";
@@ -20,11 +20,6 @@ export const readCupCallable = onCall(
     region: "us-central1",
   },
   async (request) => {
-    console.log("=== readCupCallable INVOKED (v2) ===");
-    console.log("request.auth exists:", !!request.auth);
-    console.log("request.auth?.uid:", request.auth?.uid);
-    console.log("data keys:", Object.keys(request.data || {}));
-    
     // Check authentication
     if (!request.auth) {
       throw new HttpsError(
@@ -45,7 +40,7 @@ export const readCupCallable = onCall(
       
       return await readCup(request.data, context, apiKeyValue);
     } catch (error: any) {
-      console.error("Error in readCup:", error);
+      console.error("readCupCallable error");
       // If it's already an HttpsError, rethrow it
       if (error.code && error.message) {
         throw error;
@@ -69,10 +64,6 @@ export const getDailyReadingCallable = onCall(
     region: "us-central1",
   },
   async (request) => {
-    console.log("=== getDailyReadingCallable INVOKED (v2) ===");
-    console.log("request.auth exists:", !!request.auth);
-    console.log("request.auth?.uid:", request.auth?.uid);
-    
     // Check authentication
     if (!request.auth) {
       throw new HttpsError(
@@ -90,7 +81,7 @@ export const getDailyReadingCallable = onCall(
     try {
       return await getDailyReading(request.data, context, geminiApiKey.value());
     } catch (error: any) {
-      console.error("Error in getDailyReading:", error);
+      console.error("getDailyReadingCallable error");
       // If it's already an HttpsError, rethrow it
       if (error.code && error.message) {
         throw error;

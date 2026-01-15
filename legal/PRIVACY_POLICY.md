@@ -17,10 +17,11 @@ Aplikacija Gatalinka ("mi", "nas", "aplikacija") poštuje tvoju privatnost. Ova 
 - **Ime**: Opcionalno, ako uneseš ime za gatanje drugim osobama.
 
 ### 2.3. Slike
-- **Fotografije šalice kave**: Slike koje fotografiraš ili učitavaš se koriste isključivo za AI analizu taloga i generiranje gatanja. Slike se ne koriste za treniranje AI modela niti za bilo koje druge svrhe.
+- **Fotografije šalice kave**: Sliku koju fotografiraš ili učitaš šalješ na naš backend isključivo radi AI analize taloga i generiranja gatanja. Slike se ne koriste za treniranje AI modela niti za bilo koje druge svrhe.
 
 ### 2.4. Podaci o korištenju
 - **Povijest čitanja**: Spremamo tvoja prošla čitanja (rezultate gatanja) kako bi ih mogao pregledavati kasnije.
+- **Tehnički metapodaci**: Radi stabilnosti usluge i zaštite od zloupotrebe možemo spremiti tehničke podatke kao što su vrijeme poziva i brojači poziva (rate limiting / quota). Za potrebe cacheiranja rezultata možemo spremiti i tehnički “fingerprint” slike (npr. hash) bez spremanja same slike.
 
 ## 3. Kako koristimo tvoje podatke
 
@@ -34,8 +35,7 @@ Tvoje podatke koristimo isključivo za:
 Svi podaci se sigurno pohranjuju putem **Google Firebase** usluga:
 - **Firebase Authentication**: Za prijavu i autentifikaciju
 - **Cloud Firestore**: Za pohranu tvog profila i povijesti čitanja
-- **Firebase Storage**: Za privremeno čuvanje slika šalica (samo za vrijeme obrade)
-- **Firebase Functions**: Za AI analizu slika (slike se ne pohranjuju trajno)
+- **Firebase Functions**: Za AI analizu slika (slika se obrađuje za generiranje rezultata; ne pohranjujemo samu sliku kao datoteku)
 
 ## 5. Dijeljenje podataka
 
@@ -63,7 +63,7 @@ Koristimo industrijske standarde sigurnosti:
 ## 8. Retencija podataka
 
 - **Profil i osobni podaci**: Dok god koristiš aplikaciju. Možeš ih obrisati u bilo kojem trenutku.
-- **Slike šalica**: Privremeno se čuvaju samo za vrijeme AI obrade, zatim se brišu.
+- **Slike šalica**: Slika se koristi za trenutnu obradu (AI analiza) i ne pohranjujemo je kao datoteku nakon obrade.
 - **Povijest čitanja**: Dok god koristiš aplikaciju. Biraju se kada obrišeš svoj račun.
 
 ## 9. Dobna granica

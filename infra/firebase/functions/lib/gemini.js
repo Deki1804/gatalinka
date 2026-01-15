@@ -47,47 +47,10 @@ async function generateReadingWithGemini(apiKey, imageBuffer, zodiacSign, gender
             if (attempt > 0) {
                 console.log(`Gemini API retry attempt ${attempt}/${MAX_RETRIES}...`);
             }
-            else {
-                console.log("Calling Gemini API for coffee cup reading...");
-                console.log(`Image buffer size: ${imageBuffer.length} bytes`);
-                console.log(`Image base64 length: ${imageBase64.length} characters`);
-            }
             const result = await model.generateContent([prompt, imageData]);
             const response = await result.response;
             const text = response.text();
-            console.log(`Gemini response length: ${text.length} characters`);
-            console.log(`Gemini response preview: ${text.substring(0, 300)}...`);
-            // Log visible symbols ako postoje u response-u
-            try {
-                const jsonMatch = text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const previewJson = JSON.parse(jsonMatch[0]);
-                    if (previewJson.visible_symbols) {
-                        console.log(`✅ Gemini identified ${previewJson.visible_symbols.length} symbols:`, previewJson.visible_symbols.map((s) => s.symbol || s.name || s).join(", "));
-                    }
-                    else if (previewJson.symbols) {
-                        console.log(`✅ Gemini identified ${previewJson.symbols.length} symbols:`, previewJson.symbols.join(", "));
-                    }
-                    else {
-                        console.warn("⚠️ Gemini response has NO symbols!");
-                    }
-                }
-            }
-            catch (e) {
-                // Ignore parse errors for logging
-                console.warn("Could not parse Gemini response for symbol logging:", e);
-            }
             const parsed = parseGeminiResponse(text);
-            // Log final parsed result
-            if (parsed.visible_symbols && parsed.visible_symbols.length > 0) {
-                console.log(`✅ Final parsed symbols: ${parsed.visible_symbols.map(s => s.symbol).join(", ")}`);
-            }
-            else if (parsed.symbols && parsed.symbols.length > 0) {
-                console.log(`✅ Final parsed symbols: ${parsed.symbols.join(", ")}`);
-            }
-            else {
-                console.warn("⚠️ Final parsed result has NO symbols!");
-            }
             return parsed;
         }
         catch (error) {
@@ -103,12 +66,12 @@ async function generateReadingWithGemini(apiKey, imageBuffer, zodiacSign, gender
                 error.message?.includes("quota");
             if (!isRetryable || attempt >= MAX_RETRIES) {
                 // Non-retryable error or max retries reached
-                console.error("Gemini API error (non-retryable or max retries):", error);
+                console.error("Gemini API error (non-retryable or max retries)");
                 throw new Error(`Greška pri generiranju čitanja: ${error.message || "Nepoznata greška"}`);
             }
             // Calculate exponential backoff delay
             const delay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, attempt), MAX_RETRY_DELAY);
-            console.warn(`Gemini API error (retryable), retrying in ${delay}ms:`, error.message || error);
+            console.warn(`Gemini API error (retryable), retrying in ${delay}ms:`, error?.message || "unknown");
             // Wait before retry
             await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -131,8 +94,6 @@ function parseGeminiResponse(text) {
     const jsonStart = cleaned.indexOf("{");
     const jsonEnd = cleaned.lastIndexOf("}");
     if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) {
-        console.error("No valid JSON block found in Gemini response");
-        console.error("Response preview:", text.substring(0, 500));
         // Vrati safe fallback response umjesto da baci error
         return getSafeFallbackResponse("low_contrast");
     }
@@ -144,8 +105,6 @@ function parseGeminiResponse(text) {
             parsed = JSON.parse(jsonText);
         }
         catch (parseError) {
-            console.error("JSON parse error:", parseError.message);
-            console.error("JSON text preview:", jsonText.substring(0, 500));
             // Probaj još jednom s dodatnim čišćenjem
             const doubleCleaned = jsonText
                 .replace(/,\s*}/g, "}")
@@ -155,17 +114,12 @@ function parseGeminiResponse(text) {
                 parsed = JSON.parse(doubleCleaned);
             }
             catch (retryError) {
-                console.error("Retry parse also failed:", retryError.message);
                 return getSafeFallbackResponse("low_contrast");
             }
         }
-        // Log raw luck_score iz Gemini response
-        console.log("Raw luck_score from Gemini:", parsed.luck_score);
-        console.log("Type of luck_score:", typeof parsed.luck_score);
         const finalLuckScore = typeof parsed.luck_score === "number"
             ? Math.max(0, Math.min(100, parsed.luck_score))
             : generateLuckScore();
-        console.log("Final luck_score after processing:", finalLuckScore);
         const finalEnergyScore = typeof parsed.energy_score === "number"
             ? Math.max(0, Math.min(100, parsed.energy_score))
             : generateEnergyScore();
@@ -240,8 +194,7 @@ function parseGeminiResponse(text) {
         };
     }
     catch (error) {
-        console.error("❌ PARSE_FAIL: Failed to parse Gemini JSON response:", error);
-        console.error("Response text:", jsonText.substring(0, 500));
+        console.error("PARSE_FAIL");
         // Vrati safe fallback umjesto da baci error
         return getSafeFallbackResponse("low_contrast");
     }

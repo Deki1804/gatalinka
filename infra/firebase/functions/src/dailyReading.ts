@@ -33,15 +33,6 @@ export async function getDailyReading(
   const userId = context.auth.uid;
   const { zodiacSign, gender } = data;
 
-  // Quota/billing check
-  const quotaCheck = await checkQuotaLimit();
-  if (!quotaCheck.allowed) {
-    throw new functions.https.HttpsError(
-      "resource-exhausted",
-      quotaCheck.reason || "Dostignut je limit poziva."
-    );
-  }
-
   // Provjeri da li korisnik već ima dnevno čitanje za danas
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -93,17 +84,25 @@ export async function getDailyReading(
       checkForHoroscope(existingReading.mantra || "");
     
     if (hasHoroscopeInForbiddenFields) {
-      console.warn("⚠️ Existing daily reading contains horoscope signs! Invalidating cache and generating new reading.");
+      console.warn("Existing daily reading failed validation; regenerating.");
       // Obriši stari cache i generiraj novo čitanje
       await todayReading.docs[0].ref.delete();
       // Nastavi dalje da generira novo čitanje
     } else {
-      console.log("✅ Returning existing daily reading for today (validated)");
       return existingReading;
     }
   }
 
   // Generiraj novo dnevno čitanje
+  // Quota/billing check (only when we actually generate a new reading)
+  const quotaCheck = await checkQuotaLimit();
+  if (!quotaCheck.allowed) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      quotaCheck.reason || "Dostignut je limit poziva."
+    );
+  }
+
   if (!geminiApiKey) {
     throw new Error("Gemini API nije konfiguriran.");
   }
@@ -136,8 +135,6 @@ export async function getDailyReading(
       
       if (attempt > 0) {
         console.log(`Daily reading retry attempt ${attempt}/${MAX_RETRIES}...`);
-      } else {
-        console.log("Generating daily reading for zodiac:", zodiacSign);
       }
       
       const result = await model.generateContent(prompt);
@@ -153,8 +150,6 @@ export async function getDailyReading(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log("Daily reading generated and saved for", todayStr);
-      
       // Success - return parsed result
       return parsed;
     } catch (error: any) {
@@ -173,7 +168,7 @@ export async function getDailyReading(
 
       if (!isRetryable || attempt >= MAX_RETRIES) {
         // Non-retryable error or max retries reached
-        console.error("Daily reading Gemini API error (non-retryable or max retries):", error);
+        console.error("Daily reading Gemini API error (non-retryable or max retries)");
         throw new Error(`Greška pri generiranju dnevnog čitanja: ${error.message || "Nepoznata greška"}`);
       }
 
@@ -185,7 +180,7 @@ export async function getDailyReading(
 
       console.warn(
         `Daily reading Gemini API error (retryable), retrying in ${delay}ms:`,
-        error.message || error
+        error?.message || "unknown"
       );
 
       // Wait before retry
@@ -317,7 +312,7 @@ function parseDailyReadingResponse(text: string, date: string): DailyReadingResp
       checkForHoroscope(parsed.mantra || "");
     
     if (hasHoroscopeInForbiddenFields) {
-      console.warn("⚠️ Daily reading contains horoscope signs in forbidden fields! Returning fallback.");
+      console.warn("Daily reading failed validation; returning fallback.");
       // Vrati fallback čitanje bez horoskopskog jezika
       const fallbackSymbols = ["Ptica", "Ključ", "Mjesec"];
       const fallbackLuckScore = Math.floor(Math.random() * 40) + 50;
@@ -380,8 +375,7 @@ function parseDailyReadingResponse(text: string, date: string): DailyReadingResp
       date: date,
     };
   } catch (error: any) {
-    console.error("Failed to parse Gemini JSON response:", error);
-    console.error("Response text:", jsonText.substring(0, 500));
+    console.error("Failed to parse Gemini JSON response");
     throw new Error(`Nije moguće parsirati JSON odgovor: ${error.message}`);
   }
 }

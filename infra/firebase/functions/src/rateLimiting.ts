@@ -12,70 +12,102 @@ const RATE_LIMIT_CONFIG = {
   callsPerMonth: 500,
 };
 
+const QUOTA_LIMIT_CONFIG = {
+  // Max calls per day globally (billing protection)
+  maxDailyGlobalCalls: 10000,
+};
+
+type LimitCheckResult = { allowed: boolean; reason?: string };
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function utcBucketKeys(now: Date): { minuteKey: string; dayKey: string; monthKey: string } {
+  const y = now.getUTCFullYear();
+  const m = pad2(now.getUTCMonth() + 1);
+  const d = pad2(now.getUTCDate());
+  const hh = pad2(now.getUTCHours());
+  const mm = pad2(now.getUTCMinutes());
+  const dayKey = `${y}-${m}-${d}`;
+  const monthKey = `${y}-${m}`;
+  const minuteKey = `${dayKey}T${hh}:${mm}Z`;
+  return { minuteKey, dayKey, monthKey };
+}
+
 /**
  * Check if user has exceeded rate limits
  * Returns { allowed: boolean, reason?: string }
  */
 export async function checkRateLimit(userId: string): Promise<{ allowed: boolean; reason?: string }> {
-  const db = admin.firestore();
-  const now = Date.now();
-  const oneMinuteAgo = now - 60 * 1000;
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
-  const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
-
   try {
-    // Use Promise.all for parallel queries (better performance)
-    const [recentCalls, dailyCalls, monthlyCalls] = await Promise.all([
-      db
-        .collection("readings")
-        .where("userId", "==", userId)
-        .where("timestamp", ">", admin.firestore.Timestamp.fromMillis(oneMinuteAgo))
-        .count()
-        .get(),
-      db
-        .collection("readings")
-        .where("userId", "==", userId)
-        .where("timestamp", ">", admin.firestore.Timestamp.fromMillis(oneDayAgo))
-        .count()
-        .get(),
-      db
-        .collection("readings")
-        .where("userId", "==", userId)
-        .where("timestamp", ">", admin.firestore.Timestamp.fromMillis(oneMonthAgo))
-        .count()
-        .get(),
-    ]);
+    const db = admin.firestore();
+    const now = new Date();
+    const { minuteKey, dayKey, monthKey } = utcBucketKeys(now);
 
-    // Check per-minute limit
-    if (recentCalls.data().count >= RATE_LIMIT_CONFIG.callsPerMinute) {
-      return {
-        allowed: false,
-        reason: `Prekoračen limit od ${RATE_LIMIT_CONFIG.callsPerMinute} poziva u minuti. Molimo pričekajte.`,
-      };
-    }
+    const rootRef = db.collection("rate_limits").doc(userId);
+    const minuteRef = rootRef.collection("minute").doc(minuteKey);
+    const dayRef = rootRef.collection("day").doc(dayKey);
+    const monthRef = rootRef.collection("month").doc(monthKey);
 
-    // Check per-day limit
-    if (dailyCalls.data().count >= RATE_LIMIT_CONFIG.callsPerDay) {
-      return {
-        allowed: false,
-        reason: `Prekoračen dnevni limit od ${RATE_LIMIT_CONFIG.callsPerDay} poziva. Pokušajte sutra.`,
-      };
-    }
+    const result: LimitCheckResult = await db.runTransaction(async (tx) => {
+      const [minuteSnap, daySnap, monthSnap] = await Promise.all([
+        tx.get(minuteRef),
+        tx.get(dayRef),
+        tx.get(monthRef),
+      ]);
 
-    // Check per-month limit
-    if (monthlyCalls.data().count >= RATE_LIMIT_CONFIG.callsPerMonth) {
-      return {
-        allowed: false,
-        reason: `Prekoračen mjesečni limit od ${RATE_LIMIT_CONFIG.callsPerMonth} poziva.`,
-      };
-    }
+      const minuteCount = (minuteSnap.data()?.count as number | undefined) ?? 0;
+      const dayCount = (daySnap.data()?.count as number | undefined) ?? 0;
+      const monthCount = (monthSnap.data()?.count as number | undefined) ?? 0;
 
-    return { allowed: true };
+      if (minuteCount + 1 > RATE_LIMIT_CONFIG.callsPerMinute) {
+        return {
+          allowed: false,
+          reason: `Prekoračen limit od ${RATE_LIMIT_CONFIG.callsPerMinute} poziva u minuti. Molimo pričekajte.`,
+        };
+      }
+      if (dayCount + 1 > RATE_LIMIT_CONFIG.callsPerDay) {
+        return {
+          allowed: false,
+          reason: `Prekoračen dnevni limit od ${RATE_LIMIT_CONFIG.callsPerDay} poziva. Pokušajte sutra.`,
+        };
+      }
+      if (monthCount + 1 > RATE_LIMIT_CONFIG.callsPerMonth) {
+        return {
+          allowed: false,
+          reason: `Prekoračen mjesečni limit od ${RATE_LIMIT_CONFIG.callsPerMonth} poziva.`,
+        };
+      }
+
+      const serverNow = admin.firestore.FieldValue.serverTimestamp();
+      tx.set(
+        minuteRef,
+        { count: minuteCount + 1, updatedAt: serverNow, createdAt: minuteSnap.exists ? minuteSnap.data()?.createdAt : serverNow },
+        { merge: true }
+      );
+      tx.set(
+        dayRef,
+        { count: dayCount + 1, updatedAt: serverNow, createdAt: daySnap.exists ? daySnap.data()?.createdAt : serverNow },
+        { merge: true }
+      );
+      tx.set(
+        monthRef,
+        { count: monthCount + 1, updatedAt: serverNow, createdAt: monthSnap.exists ? monthSnap.data()?.createdAt : serverNow },
+        { merge: true }
+      );
+
+      return { allowed: true };
+    });
+
+    return result;
   } catch (error: any) {
-    console.error("Rate limit check error:", error);
-    // On error, allow the request (fail open) but log the error
-    // In production, you might want to fail closed for security
-    return { allowed: true };
+    // Fail-closed: if rate limiting infra is unavailable, block the request.
+    console.error("Rate limit check error");
+    return {
+      allowed: false,
+      reason: "Trenutno nije moguće provjeriti limite. Molimo pokušajte kasnije.",
+    };
   }
 }
 
@@ -84,33 +116,47 @@ export async function checkRateLimit(userId: string): Promise<{ allowed: boolean
  * Returns { allowed: boolean, reason?: string }
  */
 export async function checkQuotaLimit(): Promise<{ allowed: boolean; reason?: string }> {
-  const db = admin.firestore();
-  const now = Date.now();
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
-
   try {
-    // Check total daily calls across all users (billing protection)
-    const dailyTotalCalls = await db
-      .collection("readings")
-      .where("timestamp", ">", admin.firestore.Timestamp.fromMillis(oneDayAgo))
-      .count()
-      .get();
+    const db = admin.firestore();
+    const now = new Date();
+    const { dayKey } = utcBucketKeys(now);
 
-    // Max 10,000 calls per day globally (adjust based on your billing plan)
-    const MAX_DAILY_GLOBAL_CALLS = 10000;
+    const quotaRef = db.collection("quota_limits").doc(`daily-${dayKey}`);
 
-    if (dailyTotalCalls.data().count >= MAX_DAILY_GLOBAL_CALLS) {
-      return {
-        allowed: false,
-        reason: "Dnevni limit poziva je dostignut. Molimo pokušajte kasnije.",
-      };
-    }
+    const result: LimitCheckResult = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(quotaRef);
+      const currentCount = (snap.data()?.count as number | undefined) ?? 0;
 
-    return { allowed: true };
+      if (currentCount + 1 > QUOTA_LIMIT_CONFIG.maxDailyGlobalCalls) {
+        return {
+          allowed: false,
+          reason: "Dnevni limit poziva je dostignut. Molimo pokušajte kasnije.",
+        };
+      }
+
+      const serverNow = admin.firestore.FieldValue.serverTimestamp();
+      tx.set(
+        quotaRef,
+        {
+          count: currentCount + 1,
+          day: dayKey,
+          updatedAt: serverNow,
+          createdAt: snap.exists ? snap.data()?.createdAt : serverNow,
+        },
+        { merge: true }
+      );
+
+      return { allowed: true };
+    });
+
+    return result;
   } catch (error: any) {
-    console.error("Quota limit check error:", error);
-    // Fail open on error
-    return { allowed: true };
+    // Fail-closed: if quota infra is unavailable, block the request.
+    console.error("Quota limit check error");
+    return {
+      allowed: false,
+      reason: "Trenutno nije moguće provjeriti limite. Molimo pokušajte kasnije.",
+    };
   }
 }
 

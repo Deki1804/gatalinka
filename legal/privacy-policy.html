@@ -54,10 +54,11 @@
     </ul>
 
     <h3>2.3. Slike</h3>
-    <p><strong>Fotografije šalice kave</strong>: Slike koje fotografiraš ili učitavaš se koriste isključivo za AI analizu taloga i generiranje gatanja. Slike se ne koriste za treniranje AI modela niti za bilo koje druge svrhe.</p>
+    <p><strong>Fotografije šalice kave</strong>: Sliku koju fotografiraš ili učitaš šalješ na naš backend isključivo radi AI analize taloga i generiranja gatanja. Slike se ne koriste za treniranje AI modela niti za bilo koje druge svrhe.</p>
 
     <h3>2.4. Podaci o korištenju</h3>
     <p><strong>Povijest čitanja</strong>: Spremamo tvoja prošla čitanja (rezultate gatanja) kako bi ih mogao pregledavati kasnije.</p>
+    <p><strong>Tehnički metapodaci</strong>: Radi stabilnosti usluge i zaštite od zloupotrebe možemo spremiti tehničke podatke kao što su vrijeme poziva i brojači poziva (rate limiting / quota). Za potrebe cacheiranja rezultata možemo spremiti i tehnički “fingerprint” slike (npr. hash) bez spremanja same slike.</p>
 
     <h2>3. Kako koristimo tvoje podatke</h2>
     <p>Tvoje podatke koristimo isključivo za:</p>
@@ -72,8 +73,7 @@
     <ul>
         <li><strong>Firebase Authentication</strong>: Za prijavu i autentifikaciju</li>
         <li><strong>Cloud Firestore</strong>: Za pohranu tvog profila i povijesti čitanja</li>
-        <li><strong>Firebase Storage</strong>: Za privremeno čuvanje slika šalica (samo za vrijeme obrade)</li>
-        <li><strong>Firebase Functions</strong>: Za AI analizu slika (slike se ne pohranjuju trajno)</li>
+        <li><strong>Firebase Functions</strong>: Za AI analizu slika (slika se obrađuje za generiranje rezultata; ne pohranjujemo samu sliku kao datoteku)</li>
     </ul>
 
     <h2>5. Dijeljenje podataka</h2>
@@ -104,7 +104,7 @@
     <h2>8. Retencija podataka</h2>
     <ul>
         <li><strong>Profil i osobni podaci</strong>: Dok god koristiš aplikaciju. Možeš ih obrisati u bilo kojem trenutku.</li>
-        <li><strong>Slike šalica</strong>: Privremeno se čuvaju samo za vrijeme AI obrade, zatim se brišu.</li>
+        <li><strong>Slike šalica</strong>: Slika se koristi za trenutnu obradu (AI analiza) i ne pohranjujemo je kao datoteku nakon obrade.</li>
         <li><strong>Povijest čitanja</strong>: Dok god koristiš aplikaciju. Biraju se kada obrišeš svoj račun.</li>
     </ul>
 

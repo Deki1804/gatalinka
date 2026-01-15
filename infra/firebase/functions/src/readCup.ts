@@ -12,17 +12,6 @@ export async function readCup(
   context: CallableContext,
   geminiApiKey: string
 ): Promise<ReadingResponse> {
-  // Debug logging - detaljna provjera auth konteksta
-  console.log("=== readCup AUTH DEBUG ===");
-  console.log("context.auth:", context.auth ? "EXISTS" : "NULL");
-  if (context.auth) {
-    console.log("context.auth.uid:", context.auth.uid);
-    console.log("context.auth.token:", context.auth.token ? "EXISTS" : "NULL");
-  } else {
-    console.error("UNAUTHENTICATED: context.auth is null");
-    console.error("Available context keys:", Object.keys(context));
-  }
-  
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -31,7 +20,6 @@ export async function readCup(
   }
 
   const userId = context.auth.uid;
-  console.log("User authenticated, UID:", userId);
   const { imageBase64, imageUrl, zodiacSign, gender, focusArea, readingMode } = data;
   
   // Rate limiting check
@@ -51,23 +39,20 @@ export async function readCup(
       quotaCheck.reason || "Dostignut je limit poziva."
     );
   }
-  
-  // Diff log za debugging - prije i poslije
-  console.log("=== readCup DIFF LOG START ===");
-  console.log("Input data:", {
-    zodiacSign,
-    gender,
-    focusArea,
-    readingMode: readingMode || "instant",
-    hasImageBase64: !!imageBase64,
-    hasImageUrl: !!imageUrl
-  });
 
   try {
-    if (!imageBase64 && !imageUrl) {
+    // SSRF hardening: we do not fetch arbitrary URLs from backend.
+    if (imageUrl) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Potrebna je slika (imageBase64 ili imageUrl)."
+        "Slanje slike putem URL-a nije podržano. Pošaljite sliku kao imageBase64."
+      );
+    }
+
+    if (!imageBase64) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Potrebna je slika (imageBase64)."
       );
     }
 
@@ -79,11 +64,11 @@ export async function readCup(
     let imageSize: number;
     let imageDimensions: string;
 
-    if (imageBase64) {
+    {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
       imageBuffer = Buffer.from(base64Data, "base64");
 
-      // Izračunaj image fingerprint
+      // Izračunaj image fingerprint (koristi se za caching, ne za logiranje)
       imageHash = crypto.createHash("sha256").update(imageBuffer).digest("hex");
       imageSize = imageBuffer.length;
       
@@ -95,19 +80,11 @@ export async function readCup(
         const metadata = await sharp(imageBuffer).metadata();
         imageDimensions = `${metadata.width || 0}x${metadata.height || 0}`;
       } catch (e) {
-        console.warn("Could not get image dimensions:", e);
+        // No verbose logging here (image/content privacy)
       }
-      
-      console.log("=== IMAGE FINGERPRINT ===");
-      console.log(`Image hash (SHA-256): ${imageHash}`);
-      console.log(`Image size: ${imageSize} bytes`);
-      console.log(`Image dimensions: ${imageDimensions}`);
-      console.log(`Image URI/source: base64 (${imageBase64.substring(0, 50)}...)`);
-      console.log("=========================");
 
       const validation = await validateImage(imageBuffer);
       if (!validation.isValid) {
-        console.log(`❌ VALIDATION_FAIL: reason=${validation.reason}`);
         return {
           main_text: "",
           love: "",
@@ -153,43 +130,6 @@ export async function readCup(
       
       // Za sada koristimo placeholder URL
       imageStoragePath = `base64://${timestamp}.jpg`;
-    } else if (imageUrl) {
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        console.log(`❌ UPLOAD_FAIL: Could not fetch image from URL`);
-        throw new functions.https.HttpsError(
-          "invalid-argument",
-          "Nije moguće dohvatiti sliku s navedenog URL-a."
-        );
-      }
-      imageBuffer = Buffer.from(await response.arrayBuffer());
-      imageStoragePath = imageUrl;
-      
-      // Izračunaj image fingerprint
-      imageHash = crypto.createHash("sha256").update(imageBuffer).digest("hex");
-      imageSize = imageBuffer.length;
-      imageDimensions = "unknown";
-      try {
-        // @ts-ignore
-        const sharp = require("sharp");
-        const metadata = await sharp(imageBuffer).metadata();
-        imageDimensions = `${metadata.width || 0}x${metadata.height || 0}`;
-      } catch (e) {
-        console.warn("Could not get image dimensions:", e);
-      }
-      
-      console.log("=== IMAGE FINGERPRINT ===");
-      console.log(`Image hash (SHA-256): ${imageHash}`);
-      console.log(`Image size: ${imageSize} bytes`);
-      console.log(`Image dimensions: ${imageDimensions}`);
-      console.log(`Image URI/source: ${imageUrl}`);
-      console.log("=========================");
-    } else {
-      console.log(`❌ UPLOAD_FAIL: No image provided`);
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Potrebna je slika."
-      );
     }
 
     // 2. PROVJERI CACHE - ako postoji reading za ovaj imageHash, vrati isti rezultat
@@ -200,7 +140,6 @@ export async function readCup(
     if (cachedReadingDoc.exists) {
       const cachedData = cachedReadingDoc.data();
       if (cachedData && cachedData.reading) {
-        console.log("✅ CACHE HIT: Returning cached reading for imageHash:", imageHash);
         const cachedReading = cachedData.reading as ReadingResponse;
         // Osiguraj da ima sve potrebne podatke
         return {
@@ -212,11 +151,6 @@ export async function readCup(
         };
       }
     }
-    
-    console.log("🔄 CACHE MISS: Generating new reading for imageHash:", imageHash);
-    
-    // 3. PROVJERI DA LI VALIDATOR BLOKIRA PRIJE AI-JA
-    console.log("✅ Image validation passed, proceeding to AI analysis...");
     
     let readingResult;
     let errorCode: ReadingErrorCode = "OK";
@@ -230,9 +164,8 @@ export async function readCup(
         focusArea || undefined,
         readingMode || "instant"
       );
-      console.log("✅ AI analysis completed successfully");
     } catch (error: any) {
-      console.error("❌ AI_ERROR:", error);
+      console.error("AI_ERROR");
       errorCode = error.message?.includes("timeout") || error.message?.includes("TIMEOUT") 
         ? "AI_TIMEOUT" 
         : "AI_ERROR";
@@ -260,21 +193,6 @@ export async function readCup(
       };
     }
     
-    // Diff log - rezultat iz Gemini
-    console.log("=== readCup DIFF LOG - Gemini Result ===");
-    console.log("Reading result:", {
-      luckScore: readingResult.luck_score,
-      energyScore: readingResult.energy_score,
-      symbolsCount: readingResult.symbols?.length || 0,
-      symbols: readingResult.symbols,
-      hasMantra: !!readingResult.mantra,
-      readingMode: readingMode || "instant"
-    });
-
-    // Log luck_score da vidimo što Gemini vraća
-    console.log("Gemini returned luck_score:", readingResult.luck_score);
-    console.log("Type of luck_score:", typeof readingResult.luck_score);
-
     const readingResponse: ReadingResponse = {
       main_text: readingResult.main_text || "",
       visible_symbols: readingResult.visible_symbols,
@@ -302,8 +220,6 @@ export async function readCup(
       image_dimensions: imageDimensions,
     };
     
-    console.log("Final luck_score in response:", readingResponse.luck_score);
-
     // 4. SPREMI U CACHE (readings_by_hash) - deterministički rezultat po imageHash
     try {
       await readingsByHashRef.doc(imageHash).set({
@@ -314,9 +230,8 @@ export async function readCup(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         userId: userId, // Za analytics (opcionalno)
       }, { merge: false }); // merge: false = overwrite ako postoji (ne bi trebalo)
-      console.log("✅ Reading cached successfully for imageHash:", imageHash);
     } catch (cacheError: any) {
-      console.error("⚠️ Cache save error (non-critical):", cacheError);
+      console.error("Cache save error (non-critical)");
       // Ne bacaj grešku - čitanje je uspješno, samo cache nije
     }
 
@@ -336,16 +251,14 @@ export async function readCup(
     // Klijent će spremiti u users/{userId}/readings kada korisnik klikne "Spremi čitanje"
     try {
       await db.collection("readings").add(readingData);
-      console.log("Reading saved to Firestore 'readings' collection successfully");
     } catch (firestoreError: any) {
-      console.error("Firestore save error (non-critical):", firestoreError);
+      console.error("Firestore save error (non-critical)");
       // Ne bacaj grešku - čitanje je uspješno, samo spremanje nije
     }
 
-    console.log("Returning reading response:", JSON.stringify(readingResponse).substring(0, 200));
     return readingResponse;
   } catch (error: any) {
-    console.error("❌ UNKNOWN_ERROR in readCup function:", error);
+    console.error("readCup UNKNOWN_ERROR");
 
     if (error instanceof functions.https.HttpsError) {
       throw error;

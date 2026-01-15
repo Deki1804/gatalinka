@@ -51,10 +51,6 @@ exports.readCupCallable = (0, https_1.onCall)({
     maxInstances: 10,
     region: "us-central1",
 }, async (request) => {
-    console.log("=== readCupCallable INVOKED (v2) ===");
-    console.log("request.auth exists:", !!request.auth);
-    console.log("request.auth?.uid:", request.auth?.uid);
-    console.log("data keys:", Object.keys(request.data || {}));
     // Check authentication
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Korisnik mora biti prijavljen da može čitati iz šalice.");
@@ -70,7 +66,7 @@ exports.readCupCallable = (0, https_1.onCall)({
         return await (0, readCup_1.readCup)(request.data, context, apiKeyValue);
     }
     catch (error) {
-        console.error("Error in readCup:", error);
+        console.error("readCupCallable error");
         // If it's already an HttpsError, rethrow it
         if (error.code && error.message) {
             throw error;
@@ -87,9 +83,6 @@ exports.getDailyReadingCallable = (0, https_1.onCall)({
     maxInstances: 10,
     region: "us-central1",
 }, async (request) => {
-    console.log("=== getDailyReadingCallable INVOKED (v2) ===");
-    console.log("request.auth exists:", !!request.auth);
-    console.log("request.auth?.uid:", request.auth?.uid);
     // Check authentication
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Korisnik mora biti prijavljen.");
@@ -103,7 +96,7 @@ exports.getDailyReadingCallable = (0, https_1.onCall)({
         return await (0, dailyReading_1.getDailyReading)(request.data, context, geminiApiKey.value());
     }
     catch (error) {
-        console.error("Error in getDailyReading:", error);
+        console.error("getDailyReadingCallable error");
         // If it's already an HttpsError, rethrow it
         if (error.code && error.message) {
             throw error;
