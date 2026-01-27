@@ -11,7 +11,7 @@ export async function readCup(
   data: { imageBase64?: string; imageUrl?: string; zodiacSign?: string; gender?: string; focusArea?: string; readingMode?: string },
   context: CallableContext,
   geminiApiKey: string
-): Promise<ReadingResponse> {
+): Promise<ReadingResponse & { is_cached?: boolean }> {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -21,7 +21,7 @@ export async function readCup(
 
   const userId = context.auth.uid;
   const { imageBase64, imageUrl, zodiacSign, gender, focusArea, readingMode } = data;
-  
+
   // Rate limiting check
   const rateLimitCheck = await checkRateLimit(userId);
   if (!rateLimitCheck.allowed) {
@@ -58,7 +58,7 @@ export async function readCup(
 
     let imageBuffer: Buffer;
     let imageStoragePath: string;
-    
+
     // Varijable za image fingerprint (koristit će se kroz cijelu funkciju)
     let imageHash: string;
     let imageSize: number;
@@ -71,7 +71,7 @@ export async function readCup(
       // Izračunaj image fingerprint (koristi se za caching, ne za logiranje)
       imageHash = crypto.createHash("sha256").update(imageBuffer).digest("hex");
       imageSize = imageBuffer.length;
-      
+
       // Dobij dimensions koristeći sharp
       imageDimensions = "unknown";
       try {
@@ -108,7 +108,7 @@ export async function readCup(
 
       const timestamp = Date.now();
       imageStoragePath = `readings/${userId}/${timestamp}.jpg`;
-      
+
       // Privremeno preskoči Storage - koristimo base64 direktno za analizu
       // Storage ćemo dodati kasnije kada se bucket kreira u Firebase konzoli
       // TODO: Kada se Storage bucket kreira, vrati ovaj kod:
@@ -127,7 +127,7 @@ export async function readCup(
       });
       await file.makePublic();
       */
-      
+
       // Za sada koristimo placeholder URL
       imageStoragePath = `base64://${timestamp}.jpg`;
     }
@@ -135,8 +135,11 @@ export async function readCup(
     // 2. PROVJERI CACHE - ako postoji reading za ovaj imageHash, vrati isti rezultat
     const db = admin.firestore();
     const readingsByHashRef = db.collection("readings_by_hash");
-    const cachedReadingDoc = await readingsByHashRef.doc(imageHash).get();
-    
+    // Composite key da podržimo različite modove za istu sliku
+    const mode = readingMode || "instant";
+    const cacheKey = `${imageHash}_${mode}`;
+    const cachedReadingDoc = await readingsByHashRef.doc(cacheKey).get();
+
     if (cachedReadingDoc.exists) {
       const cachedData = cachedReadingDoc.data();
       if (cachedData && cachedData.reading) {
@@ -145,16 +148,17 @@ export async function readCup(
         return {
           ...cachedReading,
           error_code: "OK",
+          is_cached: true,
           image_hash: imageHash,
           image_size: imageSize,
           image_dimensions: imageDimensions,
         };
       }
     }
-    
+
     let readingResult;
     let errorCode: ReadingErrorCode = "OK";
-    
+
     try {
       readingResult = await generateReadingWithGemini(
         geminiApiKey,
@@ -166,12 +170,12 @@ export async function readCup(
       );
     } catch (error: any) {
       console.error("AI_ERROR");
-      errorCode = error.message?.includes("timeout") || error.message?.includes("TIMEOUT") 
-        ? "AI_TIMEOUT" 
+      errorCode = error.message?.includes("timeout") || error.message?.includes("TIMEOUT")
+        ? "AI_TIMEOUT"
         : "AI_ERROR";
-      
+
       // Vrati fallback response s error code-om (koristi već izračunate fingerprint podatke)
-      
+
       return {
         main_text: "Talog se još skriva…",
         love: "",
@@ -192,7 +196,7 @@ export async function readCup(
         image_dimensions: imageDimensions,
       };
     }
-    
+
     const readingResponse: ReadingResponse = {
       main_text: readingResult.main_text || "",
       visible_symbols: readingResult.visible_symbols,
@@ -204,8 +208,8 @@ export async function readCup(
       health: readingResult.health || "",
       symbols: readingResult.symbols || [],
       lucky_numbers: readingResult.lucky_numbers || [],
-      luck_score: readingResult.luck_score != null && readingResult.luck_score > 0 
-        ? readingResult.luck_score 
+      luck_score: readingResult.luck_score != null && readingResult.luck_score > 0
+        ? readingResult.luck_score
         : generateDefaultLuckScore(),
       mantra: readingResult.mantra || "Danas je dan za nove mogućnosti.",
       energy_score: readingResult.energy_score != null && readingResult.energy_score >= 0
@@ -215,14 +219,15 @@ export async function readCup(
       safety_level: "ok",
       reason: "ok",
       error_code: "OK",
+      is_cached: false,
       image_hash: imageHash,
       image_size: imageSize,
       image_dimensions: imageDimensions,
     };
-    
-    // 4. SPREMI U CACHE (readings_by_hash) - deterministički rezultat po imageHash
+
+    // 4. SPREMI U CACHE (readings_by_hash) - deterministički rezultat po cacheKey
     try {
-      await readingsByHashRef.doc(imageHash).set({
+      await readingsByHashRef.doc(cacheKey).set({
         reading: readingResponse,
         imageHash: imageHash,
         imageSize: imageSize,
@@ -269,7 +274,7 @@ export async function readCup(
     let errorImageHash: string | undefined;
     let errorImageSize: number | undefined;
     let errorImageDimensions: string | undefined;
-    
+
     try {
       if (data.imageBase64) {
         const base64Data = data.imageBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -288,7 +293,7 @@ export async function readCup(
     } catch (e) {
       // Ignore - nije moguće izračunati fingerprint
     }
-    
+
     return {
       main_text: "Talog se još skriva…",
       love: "",

@@ -135,7 +135,10 @@ async function readCup(data, context, geminiApiKey) {
         // 2. PROVJERI CACHE - ako postoji reading za ovaj imageHash, vrati isti rezultat
         const db = admin.firestore();
         const readingsByHashRef = db.collection("readings_by_hash");
-        const cachedReadingDoc = await readingsByHashRef.doc(imageHash).get();
+        // Composite key da podržimo različite modove za istu sliku
+        const mode = readingMode || "instant";
+        const cacheKey = `${imageHash}_${mode}`;
+        const cachedReadingDoc = await readingsByHashRef.doc(cacheKey).get();
         if (cachedReadingDoc.exists) {
             const cachedData = cachedReadingDoc.data();
             if (cachedData && cachedData.reading) {
@@ -144,6 +147,7 @@ async function readCup(data, context, geminiApiKey) {
                 return {
                     ...cachedReading,
                     error_code: "OK",
+                    is_cached: true,
                     image_hash: imageHash,
                     image_size: imageSize,
                     image_dimensions: imageDimensions,
@@ -203,13 +207,14 @@ async function readCup(data, context, geminiApiKey) {
             safety_level: "ok",
             reason: "ok",
             error_code: "OK",
+            is_cached: false,
             image_hash: imageHash,
             image_size: imageSize,
             image_dimensions: imageDimensions,
         };
-        // 4. SPREMI U CACHE (readings_by_hash) - deterministički rezultat po imageHash
+        // 4. SPREMI U CACHE (readings_by_hash) - deterministički rezultat po cacheKey
         try {
-            await readingsByHashRef.doc(imageHash).set({
+            await readingsByHashRef.doc(cacheKey).set({
                 reading: readingResponse,
                 imageHash: imageHash,
                 imageSize: imageSize,

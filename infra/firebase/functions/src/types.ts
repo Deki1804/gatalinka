@@ -3,11 +3,11 @@
   meaning: string;
 }
 
-export type ReadingErrorCode = 
-  | "OK" 
-  | "VALIDATION_FAIL" 
-  | "UPLOAD_FAIL" 
-  | "AI_TIMEOUT" 
+export type ReadingErrorCode =
+  | "OK"
+  | "VALIDATION_FAIL"
+  | "UPLOAD_FAIL"
+  | "AI_TIMEOUT"
   | "AI_ERROR"
   | "PARSE_FAIL"
   | "UNKNOWN_ERROR";
@@ -33,6 +33,7 @@ export interface ReadingResponse {
   image_hash?: string; // SHA-256 hash slike za provjeru da su različite
   image_size?: number; // Veličina slike u bytes
   image_dimensions?: string; // "width x height"
+  is_cached?: boolean; // Je li rezultat iz cache-a
 }
 
 export interface FirestoreReading {

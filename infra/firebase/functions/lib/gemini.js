@@ -36,7 +36,6 @@ async function generateReadingWithGemini(apiKey, imageBuffer, zodiacSign, gender
             const model = genAI.getGenerativeModel({
                 model: "gemini-2.0-flash",
             });
-            const prompt = buildPrompt(zodiacSign, gender, focusArea, readingMode);
             const imageBase64 = imageBuffer.toString("base64");
             const imageData = {
                 inlineData: {
@@ -47,11 +46,20 @@ async function generateReadingWithGemini(apiKey, imageBuffer, zodiacSign, gender
             if (attempt > 0) {
                 console.log(`Gemini API retry attempt ${attempt}/${MAX_RETRIES}...`);
             }
-            const result = await model.generateContent([prompt, imageData]);
-            const response = await result.response;
-            const text = response.text();
-            const parsed = parseGeminiResponse(text);
-            return parsed;
+            // Two-pass quality gate:
+            // If Gemini returns overly generic symbols (esp. "Zmija"), retry once with a stricter prompt.
+            const basePrompt = buildPrompt(zodiacSign, gender, focusArea, readingMode);
+            const text1 = (await (await model.generateContent([basePrompt, imageData])).response).text();
+            const parsed1 = parseGeminiResponse(text1);
+            if (!shouldRetryForGenericSymbols(parsed1, readingMode)) {
+                return parsed1;
+            }
+            const retryPrompt = buildPrompt(zodiacSign, gender, focusArea, readingMode, {
+                avoidSymbols: ["Zmija", "Ptica", "Mjesec", "Staza"],
+            });
+            const text2 = (await (await model.generateContent([retryPrompt, imageData])).response).text();
+            const parsed2 = parseGeminiResponse(text2);
+            return parsed2;
         }
         catch (error) {
             lastError = error;
@@ -79,6 +87,32 @@ async function generateReadingWithGemini(apiKey, imageBuffer, zodiacSign, gender
     // Should never reach here, but just in case
     console.error("Gemini API: All retries exhausted");
     throw new Error(`Greška pri generiranju čitanja: ${lastError?.message || "Nepoznata greška"}`);
+}
+function normalizeSymbol(s) {
+    return (s || "").trim().toLowerCase();
+}
+function extractSymbols(result) {
+    const fromVisible = (result.visible_symbols || [])
+        .map((v) => v?.symbol)
+        .filter((s) => typeof s === "string" && s.trim().length > 0);
+    const fromList = (result.symbols || [])
+        .filter((s) => typeof s === "string" && s.trim().length > 0);
+    return [...fromVisible, ...fromList].map(normalizeSymbol);
+}
+function shouldRetryForGenericSymbols(result, readingMode) {
+    // Deep mode is already verbose; don't add extra Gemini calls there by default.
+    if (readingMode === "deep")
+        return false;
+    const symbols = extractSymbols(result);
+    if (symbols.length === 0)
+        return true;
+    // Primary complaint: "Zmija" showing up too often.
+    if (symbols.includes("zmija"))
+        return true;
+    const common = new Set(["ptica", "mjesec", "staza", "put", "srce", "ključ", "zvijezda", "sunce"]);
+    const unique = Array.from(new Set(symbols));
+    const allCommon = unique.every((s) => common.has(s));
+    return allCommon;
 }
 function parseGeminiResponse(text) {
     let cleaned = text;
@@ -250,7 +284,7 @@ function getSafeFallbackResponse(reason) {
         horoscope_match: undefined,
     };
 }
-function buildPrompt(zodiacSign, gender, focusArea, readingMode = "instant") {
+function buildPrompt(zodiacSign, gender, focusArea, readingMode = "instant", opts) {
     const contextParts = [];
     if (zodiacSign)
         contextParts.push(`Korisnikov znak zodijaka: ${zodiacSign}`);
@@ -336,6 +370,17 @@ OBLICI I OBJEKTI:
 - Plod - rezultat, nagrada
 - Sjeme - početak, potencijal
 `;
+    const avoidBlock = (opts?.avoidSymbols && opts.avoidSymbols.length > 0)
+        ? `
+🚫 DODATNA VALIDACIJA (2. pokušaj):
+- U ovom pokušaju NEMOJ koristiti sljedeće simbole: ${opts.avoidSymbols.join(", ")}.
+- Smiješ ih koristiti samo ako su NA SLICI 100% nedvosmisleno vidljivi (jasan oblik + pozicija).
+`
+        : `
+🚫 ANTI-BIAS (VAŽNO):
+- ZMIJA je rijetka. Nemoj je koristiti osim ako vidiš jasnu zmijoliku/S-liniju (i možeš opisati poziciju).
+- Ako nisi sigurna za simbol, izbaci ga i izaberi drugi koji stvarno vidiš.
+`;
     // Prilagodi prompt ovisno o modu čitanja - BAPSKI STIL
     let modeInstruction = "";
     switch (readingMode) {
@@ -411,6 +456,8 @@ ${contextStr}
 
 ${traditionalSymbols}
 
+${avoidBlock}
+
 ${modeInstruction}
 
 🔥 KLJUČNO PRAVILO - OVO JE NAJVAŽNIJE:
@@ -447,6 +494,10 @@ Ako za različite slike vraćaš iste simbole, odgovor je POGREŠAN.
 - "energija dana", "vibracije", "kozmički"
 - Apstraktne fraze bez veze sa simbolima
 - Tekst koji ne objašnjava točno simbole iz "VIDIM U ŠALICI"
+
+✅ DODATNO PRAVILO (PROTIV IZMIŠLJANJA):
+- Svaki simbol koji navedeš mora imati 2 stvari: (1) POZICIJU u šalici i (2) kratki opis ZAŠTO ga vidiš (oblik/linija/mrlja).
+- Ako ne možeš opisati zašto ga vidiš, onda ga NE vidiš.
 
 🚨 KLJUČNO PRAVILO - HOROSKOPSKI ZNAK (OVAN, LAV, BLIZANCI, RAK, VAGA, ŠKORPION, STRIJELAC, JARAC, VODENJAK, RIBE, BIK):
 - U main_text, interpretation, advice, love, work, money, health NIKADA NE SMIJEŠ spominjati horoskopske znakove (Ovan, Lav, Blizanci, Rak, Vaga, Škorpion, Strijelac, Jarac, Vodenjak, Ribe, Bik).
